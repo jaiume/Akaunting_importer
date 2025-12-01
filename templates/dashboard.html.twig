@@ -1,0 +1,54 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Dashboard - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </h1>
+        
+        <p class="lead">Welcome, {{ user.name }}!</p>
+        
+        <div class="row mt-4">
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-file-earmark-pdf text-danger"></i> PDF Import
+                        </h5>
+                        <p class="card-text">Import bank statements from PDF files.</p>
+                        <a href="#" class="btn btn-primary">Import PDF</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-filetype-csv text-success"></i> CSV Import
+                        </h5>
+                        <p class="card-text">Import bank statements from CSV files.</p>
+                        <a href="#" class="btn btn-success">Import CSV</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-gear text-info"></i> Settings
+                        </h5>
+                        <p class="card-text">Configure your Akaunting installations.</p>
+                        <a href="#" class="btn btn-info">Settings</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
