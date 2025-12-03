@@ -1,0 +1,174 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Manage Akaunting Installations - Settings - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings">Settings</a></li>
+                <li class="breadcrumb-item active">Akaunting Installations</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">
+                <i class="bi bi-cloud"></i> Akaunting Installations
+            </h1>
+            <a href="{{ base_url }}settings/installations/create" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Add Installation
+            </a>
+        </div>
+        
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {% if success == 'created' %}
+                <i class="bi bi-check-circle"></i> Installation created successfully!
+            {% elseif success == 'updated' %}
+                <i class="bi bi-check-circle"></i> Installation updated successfully!
+            {% elseif success == 'deleted' %}
+                <i class="bi bi-check-circle"></i> Installation deleted successfully!
+            {% elseif success == 'connection_ok' %}
+                <i class="bi bi-check-circle"></i> Connection test successful! API is reachable.
+            {% else %}
+                <i class="bi bi-check-circle"></i> {{ success }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'not_found' %}
+                <i class="bi bi-exclamation-triangle"></i> Installation not found.
+            {% elseif error == 'connection_failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Connection test failed. Please check your credentials and URL.
+            {% elseif error == 'delete_failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to delete installation. Please try again.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if installations|length > 0 %}
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Name</th>
+                                <th>Base URL</th>
+                                <th>API Email</th>
+                                <th class="text-center">Status</th>
+                                <th>Last Sync</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for installation in installations %}
+                            <tr>
+                                <td>
+                                    <strong>{{ installation.name }}</strong>
+                                    {% if installation.description %}
+                                    <br><small class="text-muted">{{ installation.description }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ installation.base_url }}" target="_blank" class="text-decoration-none">
+                                        {{ installation.base_url|length > 40 ? installation.base_url[:40] ~ '...' : installation.base_url }}
+                                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                    </a>
+                                </td>
+                                <td>{{ installation.api_email }}</td>
+                                <td class="text-center">
+                                    {% if installation.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if installation.last_sync %}
+                                        {{ installation.last_sync|date('M j, Y H:i') }}
+                                    {% else %}
+                                        <span class="text-muted">Never</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <form method="POST" action="{{ base_url }}settings/installations/{{ installation.installation_id }}/test" class="d-inline">
+                                            <button type="submit" class="btn btn-outline-success" title="Test Connection">
+                                                <i class="bi bi-wifi"></i>
+                                            </button>
+                                        </form>
+                                        <a href="{{ base_url }}settings/installations/{{ installation.installation_id }}/edit" 
+                                           class="btn btn-outline-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal{{ installation.installation_id }}"
+                                                title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Delete Modal -->
+                                    <div class="modal fade" id="deleteModal{{ installation.installation_id }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Confirm Delete</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body text-start">
+                                                    <p>Are you sure you want to delete the installation <strong>{{ installation.name }}</strong>?</p>
+                                                    <p class="text-danger mb-0">This action cannot be undone.</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form method="POST" action="{{ base_url }}settings/installations/{{ installation.installation_id }}/delete" class="d-inline">
+                                                        <button type="submit" class="btn btn-danger">
+                                                            <i class="bi bi-trash"></i> Delete
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-cloud fs-1 text-muted"></i>
+                <p class="text-muted mt-3 mb-3">No Akaunting installations configured. Add your first installation to sync transactions.</p>
+                <a href="{{ base_url }}settings/installations/create" class="btn btn-primary">
+                    <i class="bi bi-plus-lg"></i> Add Installation
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="mt-4">
+            <a href="{{ base_url }}settings" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Settings
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+

@@ -11,28 +11,39 @@
                     <i class="bi bi-box-arrow-in-right"></i> Login
                 </h2>
                 
+                {% if success %}
+                <div class="alert alert-success" role="alert">
+                    <i class="bi bi-check-circle"></i> 
+                    A login link has been sent to your email address. Please check your inbox and click the link to log in.
+                </div>
+                {% endif %}
+                
+                {% if error %}
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    {% if error == 'invalid_token' %}
+                        Invalid or expired login link. Please request a new one.
+                    {% else %}
+                        {{ error }}
+                    {% endif %}
+                </div>
+                {% endif %}
+                
                 <form method="POST" action="{{ base_url }}login">
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email" required autofocus>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
-                    
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="remember" name="remember">
-                        <label class="form-check-label" for="remember">
-                            Remember me
-                        </label>
+                        <label for="email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="email" name="email" required autofocus placeholder="your@email.com">
+                        <small class="form-text text-muted">We'll send you a login link via email</small>
                     </div>
                     
                     <button type="submit" class="btn btn-primary w-100 mb-2">
-                        <i class="bi bi-box-arrow-in-right"></i> Login
+                        <i class="bi bi-envelope"></i> Send Login Link
                     </button>
                 </form>
+                
+                <p class="text-center text-muted small mt-3">
+                    No password needed! We'll email you a secure login link.
+                </p>
             </div>
         </div>
     </div>

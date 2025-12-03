@@ -1,0 +1,587 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Entities Management - Settings - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .entity-card {
+        border-left: 4px solid #4f46e5;
+    }
+    .entity-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .account-row:hover {
+        background-color: #f8f9fa;
+    }
+    .account-type-bank {
+        color: #0d6efd;
+    }
+    .account-type-credit {
+        color: #fd7e14;
+    }
+    .section-header {
+        background-color: #f8f9fa;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #6c757d;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .installation-info {
+        background: linear-gradient(135deg, #e7f3ff 0%, #f0f7ff 100%);
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 1rem 1rem 1rem;
+    }
+    .akaunting-link-badge {
+        font-size: 0.75rem;
+        background: #e7f3ff;
+        padding: 2px 8px;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings">Settings</a></li>
+                <li class="breadcrumb-item active">Entities Management</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">
+                <i class="bi bi-building"></i> Entities Management
+            </h1>
+            <a href="{{ base_url }}settings/entities/create" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Add Entity
+            </a>
+        </div>
+        
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {% if success == 'created' %}
+                <i class="bi bi-check-circle"></i> Entity created successfully!
+            {% elseif success == 'updated' %}
+                <i class="bi bi-check-circle"></i> Entity updated successfully!
+            {% elseif success == 'deleted' %}
+                <i class="bi bi-check-circle"></i> Entity deleted successfully!
+            {% elseif success == 'account_created' %}
+                <i class="bi bi-check-circle"></i> Account created successfully!
+            {% elseif success == 'account_updated' %}
+                <i class="bi bi-check-circle"></i> Account updated successfully!
+            {% elseif success == 'account_deleted' %}
+                <i class="bi bi-check-circle"></i> Account deleted successfully!
+            {% elseif success == 'installation_created' %}
+                <i class="bi bi-check-circle"></i> Akaunting installation configured successfully!
+            {% elseif success == 'installation_updated' %}
+                <i class="bi bi-check-circle"></i> Akaunting installation updated successfully!
+            {% elseif success == 'installation_deleted' %}
+                <i class="bi bi-check-circle"></i> Akaunting installation removed successfully!
+            {% else %}
+                <i class="bi bi-check-circle"></i> {{ success }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'not_found' %}
+                <i class="bi bi-exclamation-triangle"></i> Entity not found.
+            {% elseif error == 'has_accounts' %}
+                <i class="bi bi-exclamation-triangle"></i> Cannot delete entity: it has associated accounts.
+            {% elseif error == 'has_installation' %}
+                <i class="bi bi-exclamation-triangle"></i> Cannot delete entity: remove the Akaunting installation first.
+            {% elseif error == 'delete_failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to delete. Please try again.
+            {% elseif error == 'has_batches' %}
+                <i class="bi bi-exclamation-triangle"></i> Cannot delete account: it has associated import batches.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if entities|length > 0 %}
+            {% for entity in entities %}
+            <div class="card entity-card mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="bi bi-building text-primary"></i> {{ entity.entity_name }}
+                        </h5>
+                        {% if entity.description %}
+                        <small class="text-muted">{{ entity.description }}</small>
+                        {% endif %}
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <a href="{{ base_url }}settings/entities/{{ entity.entity_id }}/edit" 
+                           class="btn btn-outline-primary" title="Edit Entity">
+                            <i class="bi bi-pencil"></i> Edit
+                        </a>
+                        <button type="button" class="btn btn-outline-danger" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#deleteEntityModal{{ entity.entity_id }}"
+                                title="Delete Entity"
+                                {% if entity.accounts|length > 0 or entity.installation %}disabled{% endif %}>
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body p-0">
+                    <!-- Akaunting Installation Section -->
+                    <div class="section-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-cloud"></i> Akaunting Installation</span>
+                        {% if not entity.installation %}
+                        <a href="{{ base_url }}settings/entities/{{ entity.entity_id }}/installations/create" 
+                           class="btn btn-info btn-sm">
+                            <i class="bi bi-plus-lg"></i> Configure Akaunting
+                        </a>
+                        {% endif %}
+                    </div>
+                    
+                    {% if entity.installation %}
+                    <div class="installation-info">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">
+                                    <i class="bi bi-cloud-check text-info"></i> {{ entity.installation.name }}
+                                </h6>
+                                <small class="text-muted d-block">{{ entity.installation.base_url }}</small>
+                                {% if entity.installation.last_sync %}
+                                <small class="text-muted">Last sync: {{ entity.installation.last_sync|date('M j, Y H:i') }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-success btn-sm test-connection-btn" 
+                                        data-installation-id="{{ entity.installation.installation_id }}" title="Test Connection">
+                                    <i class="bi bi-plug"></i> Test
+                                </button>
+                                <a href="{{ base_url }}settings/installations/{{ entity.installation.installation_id }}/edit?return=entities" 
+                                   class="btn btn-outline-primary btn-sm" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger btn-sm" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#deleteInstallationModal{{ entity.installation.installation_id }}" 
+                                        title="Remove">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Delete Installation Modal -->
+                        <div class="modal fade" id="deleteInstallationModal{{ entity.installation.installation_id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Remove Akaunting Installation</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body text-start">
+                                        <p>Are you sure you want to remove the Akaunting installation <strong>{{ entity.installation.name }}</strong>?</p>
+                                        <p class="text-danger mb-0">This will also remove all account links to this installation.</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="{{ base_url }}settings/installations/{{ entity.installation.installation_id }}/delete?return=entities" class="d-inline">
+                                            <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Remove</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3 text-muted mx-3">
+                        <i class="bi bi-cloud-slash"></i> No Akaunting installation configured. 
+                        <a href="{{ base_url }}settings/entities/{{ entity.entity_id }}/installations/create">Configure now</a> to enable transaction syncing.
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Accounts Section -->
+                    <div class="section-header d-flex justify-content-between align-items-center border-top">
+                        <span><i class="bi bi-wallet2"></i> Bank Accounts</span>
+                        <a href="{{ base_url }}settings/entities/{{ entity.entity_id }}/accounts/create" 
+                           class="btn btn-success btn-sm">
+                            <i class="bi bi-plus-lg"></i> Add Account
+                        </a>
+                    </div>
+                    
+                    {% if entity.accounts|length > 0 %}
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 22%">Account Name</th>
+                                <th style="width: 12%">Type</th>
+                                <th style="width: 8%">Currency</th>
+                                <th>Linked Akaunting Account</th>
+                                <th style="width: 70px" class="text-center">Status</th>
+                                <th style="width: 120px" class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for account in entity.accounts %}
+                            <tr class="account-row">
+                                <td>
+                                    <strong>{{ account.account_name }}</strong>
+                                    {% if account.description %}
+                                    <br><small class="text-muted">{{ account.description }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if account.account_type == 'credit_card' %}
+                                        <span class="account-type-credit"><i class="bi bi-credit-card"></i> Credit</span>
+                                    {% else %}
+                                        <span class="account-type-bank"><i class="bi bi-bank"></i> Bank</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ account.currency }}</td>
+                                <td id="account-link-{{ account.account_id }}">
+                                    {% if entity.installation %}
+                                        <span class="text-muted"><i class="bi bi-hourglass-split"></i> Loading...</span>
+                                    {% else %}
+                                        <span class="text-muted fst-italic">Configure Akaunting first</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if account.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        {% if entity.installation %}
+                                        <button type="button" class="btn btn-outline-info btn-sm link-account-btn" 
+                                                data-account-id="{{ account.account_id }}"
+                                                data-account-name="{{ account.account_name }}"
+                                                data-installation-id="{{ entity.installation.installation_id }}"
+                                                data-installation-name="{{ entity.installation.name }}"
+                                                title="Link to Akaunting">
+                                            <i class="bi bi-link-45deg"></i>
+                                        </button>
+                                        {% endif %}
+                                        <a href="{{ base_url }}settings/accounts/{{ account.account_id }}/edit" 
+                                           class="btn btn-outline-primary btn-sm" title="Edit"><i class="bi bi-pencil"></i></a>
+                                        <button type="button" class="btn btn-outline-danger btn-sm" 
+                                                data-bs-toggle="modal" data-bs-target="#deleteAccountModal{{ account.account_id }}" title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Delete Account Modal -->
+                                    <div class="modal fade" id="deleteAccountModal{{ account.account_id }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Confirm Delete</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body text-start">
+                                                    <p>Are you sure you want to delete the account <strong>{{ account.account_name }}</strong>?</p>
+                                                    <p class="text-danger mb-0">This action cannot be undone.</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form method="POST" action="{{ base_url }}settings/accounts/{{ account.account_id }}/delete?return=entities" class="d-inline">
+                                                        <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Delete</button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="text-center py-3 text-muted">
+                        <i class="bi bi-wallet2"></i> No accounts yet. 
+                        <a href="{{ base_url }}settings/entities/{{ entity.entity_id }}/accounts/create">Add an account</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Delete Entity Modal -->
+            <div class="modal fade" id="deleteEntityModal{{ entity.entity_id }}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Confirm Delete</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body text-start">
+                            <p>Are you sure you want to delete the entity <strong>{{ entity.entity_name }}</strong>?</p>
+                            <p class="text-danger mb-0">This action cannot be undone.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <form method="POST" action="{{ base_url }}settings/entities/{{ entity.entity_id }}/delete" class="d-inline">
+                                <button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-building fs-1 text-muted"></i>
+                <p class="text-muted mt-3 mb-3">No entities found. Create your first entity to get started.</p>
+                <a href="{{ base_url }}settings/entities/create" class="btn btn-primary">
+                    <i class="bi bi-plus-lg"></i> Add Entity
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="mt-4">
+            <a href="{{ base_url }}settings" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Settings
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Link Account Modal (simplified - only one installation per entity) -->
+<div class="modal fade" id="linkAccountModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-link-45deg"></i> Link to Akaunting</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Link <strong id="linkAccountName"></strong> to an account in <strong id="linkInstallationName"></strong>
+                </p>
+                
+                <div class="mb-3">
+                    <label for="linkAkauntingAccount" class="form-label">Akaunting Account</label>
+                    <select class="form-select" id="linkAkauntingAccount">
+                        <option value="">Loading accounts...</option>
+                    </select>
+                    <small class="form-text text-muted">Select the corresponding account in Akaunting</small>
+                </div>
+                
+                <div id="linkError" class="alert alert-danger" style="display: none;"></div>
+                
+                <div id="currentLinkSection" style="display: none;">
+                    <hr>
+                    <h6>Current Link</h6>
+                    <div id="currentLink" class="d-flex justify-content-between align-items-center p-2 bg-light rounded">
+                        <span id="currentLinkName"></span>
+                        <button type="button" class="btn btn-outline-danger btn-sm" id="removeLinkBtn">
+                            <i class="bi bi-trash"></i> Remove
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveLinkBtn" disabled>
+                    <i class="bi bi-link-45deg"></i> Save Link
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const baseUrl = '{{ base_url }}';
+    let currentAccountId = null;
+    let currentInstallationId = null;
+    let hasCurrentLink = false;
+    let akauntingAccounts = [];
+    
+    // Load account links for all accounts on page load
+    document.querySelectorAll('[id^="account-link-"]').forEach(function(el) {
+        const accountId = el.id.replace('account-link-', '');
+        loadAccountLink(accountId);
+    });
+    
+    // Load account link (single link stored directly on account)
+    function loadAccountLink(accountId) {
+        const container = document.getElementById('account-link-' + accountId);
+        if (!container || container.textContent.includes('Configure Akaunting first')) return;
+        
+        fetch(baseUrl + 'api/accounts/' + accountId + '/link')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.link) {
+                    container.innerHTML = '<span class="akaunting-link-badge"><i class="bi bi-link-45deg text-info me-1"></i>' + data.link.akaunting_account_name + '</span>';
+                } else {
+                    container.innerHTML = '<span class="text-muted fst-italic">Not linked</span>';
+                }
+            })
+            .catch(error => {
+                container.innerHTML = '<span class="text-danger">Error</span>';
+            });
+    }
+    
+    // Link account button click
+    document.querySelectorAll('.link-account-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            currentAccountId = this.dataset.accountId;
+            currentInstallationId = this.dataset.installationId;
+            const accountName = this.dataset.accountName;
+            const installationName = this.dataset.installationName;
+            
+            document.getElementById('linkAccountName').textContent = accountName;
+            document.getElementById('linkInstallationName').textContent = installationName;
+            document.getElementById('linkAkauntingAccount').innerHTML = '<option value="">Loading accounts...</option>';
+            document.getElementById('linkError').style.display = 'none';
+            document.getElementById('saveLinkBtn').disabled = true;
+            document.getElementById('currentLinkSection').style.display = 'none';
+            hasCurrentLink = false;
+            
+            // Fetch current link and Akaunting accounts in parallel
+            Promise.all([
+                fetch(baseUrl + 'api/accounts/' + currentAccountId + '/link').then(r => r.json()),
+                fetch(baseUrl + 'api/installations/' + currentInstallationId + '/akaunting-accounts').then(r => r.json())
+            ])
+            .then(([linkData, accountsData]) => {
+                // Handle current link (stored directly on account)
+                if (linkData.success && linkData.link) {
+                    hasCurrentLink = true;
+                    document.getElementById('currentLinkName').innerHTML = '<i class="bi bi-link-45deg text-info"></i> ' + linkData.link.akaunting_account_name + ' (ID: ' + linkData.link.akaunting_account_id + ')';
+                    document.getElementById('currentLinkSection').style.display = 'block';
+                }
+                
+                // Handle Akaunting accounts
+                if (accountsData.success) {
+                    akauntingAccounts = accountsData.accounts;
+                    let options = '<option value="">Select account...</option>';
+                    accountsData.accounts.forEach(function(acc) {
+                        const label = acc.name + (acc.number ? ' (' + acc.number + ')' : '') + (acc.currency_code ? ' - ' + acc.currency_code : '');
+                        options += '<option value="' + acc.id + '" data-name="' + acc.name + '">' + label + '</option>';
+                    });
+                    document.getElementById('linkAkauntingAccount').innerHTML = options;
+                } else {
+                    document.getElementById('linkAkauntingAccount').innerHTML = '<option value="">Error: ' + (accountsData.error || 'Failed to load') + '</option>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('linkError').textContent = 'Failed to load: ' + error.message;
+                document.getElementById('linkError').style.display = 'block';
+            });
+            
+            new bootstrap.Modal(document.getElementById('linkAccountModal')).show();
+        });
+    });
+    
+    // Akaunting account selection change
+    document.getElementById('linkAkauntingAccount').addEventListener('change', function() {
+        document.getElementById('saveLinkBtn').disabled = !this.value;
+    });
+    
+    // Save link button
+    document.getElementById('saveLinkBtn').addEventListener('click', function() {
+        const accountSelect = document.getElementById('linkAkauntingAccount');
+        const selectedOption = accountSelect.options[accountSelect.selectedIndex];
+        const akauntingAccountId = accountSelect.value;
+        const akauntingAccountName = selectedOption.dataset.name;
+        
+        this.disabled = true;
+        this.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+        
+        fetch(baseUrl + 'api/accounts/' + currentAccountId + '/link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                akaunting_account_id: akauntingAccountId,
+                akaunting_account_name: akauntingAccountName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                document.getElementById('linkError').textContent = data.error || 'Failed to save';
+                document.getElementById('linkError').style.display = 'block';
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-link-45deg"></i> Save Link';
+            }
+        })
+        .catch(error => {
+            document.getElementById('linkError').textContent = 'Error: ' + error.message;
+            document.getElementById('linkError').style.display = 'block';
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-link-45deg"></i> Save Link';
+        });
+    });
+    
+    // Remove link button
+    document.getElementById('removeLinkBtn').addEventListener('click', function() {
+        if (!hasCurrentLink || !confirm('Remove this link?')) return;
+        
+        fetch(baseUrl + 'api/accounts/' + currentAccountId + '/link', { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Failed: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => alert('Error: ' + error.message));
+    });
+    
+    // Test connection buttons
+    document.querySelectorAll('.test-connection-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const installationId = this.dataset.installationId;
+            const originalHtml = this.innerHTML;
+            
+            this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            this.disabled = true;
+            
+            fetch(baseUrl + 'settings/installations/' + installationId + '/test', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.innerHTML = originalHtml;
+                this.disabled = false;
+                
+                if (data.success) {
+                    this.classList.remove('btn-outline-success');
+                    this.classList.add('btn-success');
+                    setTimeout(() => {
+                        this.classList.remove('btn-success');
+                        this.classList.add('btn-outline-success');
+                    }, 2000);
+                    alert('Connection successful!');
+                } else {
+                    alert('Connection failed: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                this.innerHTML = originalHtml;
+                this.disabled = false;
+                alert('Error: ' + error.message);
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

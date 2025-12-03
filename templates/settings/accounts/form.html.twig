@@ -1,0 +1,189 @@
+{% extends "base.html.twig" %}
+
+{% block title %}{{ mode == 'create' ? 'Add' : 'Edit' }} Account - Settings - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings">Settings</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings/entities">Entities & Accounts</a></li>
+                <li class="breadcrumb-item active">{{ mode == 'create' ? 'Add Account' : 'Edit Account' }}</li>
+            </ol>
+        </nav>
+        
+        <h1 class="mb-4">
+            <i class="bi bi-{{ mode == 'create' ? 'plus-lg' : 'pencil' }}"></i> 
+            {{ mode == 'create' ? 'Add New Account' : 'Edit Account' }}
+        </h1>
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'required' %}
+                <i class="bi bi-exclamation-triangle"></i> Entity and Account name are required.
+            {% elseif error == 'exists' %}
+                <i class="bi bi-exclamation-triangle"></i> An account with this name already exists for this entity.
+            {% elseif error == 'not_found' %}
+                <i class="bi bi-exclamation-triangle"></i> Entity not found.
+            {% elseif error == 'failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to save account. Please try again.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form method="POST" action="{{ base_url }}settings/accounts/{% if mode == 'edit' %}{{ account.account_id }}/edit{% else %}create{% endif %}">
+                            <div class="mb-3">
+                                <label for="entity_id" class="form-label">Entity <span class="text-danger">*</span></label>
+                                <select class="form-select" id="entity_id" name="entity_id" required>
+                                    <option value="">-- Select Entity --</option>
+                                    {% for entity in entities %}
+                                    <option value="{{ entity.entity_id }}" {% if account.entity_id == entity.entity_id %}selected{% endif %}>
+                                        {{ entity.entity_name }}{% if entity.description %} - {{ entity.description }}{% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="form-text text-muted">The entity this account belongs to.</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="account_name" class="form-label">Account Name <span class="text-danger">*</span></label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="account_name" 
+                                       name="account_name" 
+                                       value="{{ account.account_name ?? '' }}"
+                                       required 
+                                       placeholder="e.g., RBL Checking Account">
+                                <small class="form-text text-muted">A descriptive name for this bank account.</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea class="form-control" 
+                                          id="description" 
+                                          name="description" 
+                                          rows="2" 
+                                          placeholder="Optional description...">{{ account.description ?? '' }}</textarea>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="account_type" class="form-label">Account Type <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="account_type" name="account_type" required>
+                                            <option value="bank" {% if (account.account_type ?? 'bank') == 'bank' %}selected{% endif %}>
+                                                Bank Account
+                                            </option>
+                                            <option value="credit_card" {% if account.account_type == 'credit_card' %}selected{% endif %}>
+                                                Credit Card
+                                            </option>
+                                        </select>
+                                        <small class="form-text text-muted" id="account_type_help">
+                                            Negative values = Expense, Positive values = Income
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="currency" class="form-label">Currency</label>
+                                        <select class="form-select" id="currency" name="currency">
+                                            <option value="TTD" {% if (account.currency ?? 'TTD') == 'TTD' %}selected{% endif %}>TTD - Trinidad Dollar</option>
+                                            <option value="USD" {% if account.currency == 'USD' %}selected{% endif %}>USD - US Dollar</option>
+                                            <option value="EUR" {% if account.currency == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+                                            <option value="GBP" {% if account.currency == 'GBP' %}selected{% endif %}>GBP - British Pound</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                           {% if mode == 'create' or account.is_active %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_active">
+                                        Active
+                                    </label>
+                                    <small class="form-text text-muted d-block">Inactive accounts won't appear in import forms.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check-lg"></i> {{ mode == 'create' ? 'Create Account' : 'Save Changes' }}
+                                </button>
+                                <a href="{{ base_url }}settings/entities" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-lg"></i> Cancel
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Help</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Account Types</strong></p>
+                        
+                        <div class="mb-3">
+                            <p class="mb-1"><i class="bi bi-bank text-primary"></i> <strong>Bank Account</strong></p>
+                            <ul class="text-muted small mb-0">
+                                <li>Checking, Savings accounts</li>
+                                <li><span class="text-danger">Negative</span> = Expense (money out)</li>
+                                <li><span class="text-success">Positive</span> = Income (money in)</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <p class="mb-1"><i class="bi bi-credit-card text-warning"></i> <strong>Credit Card</strong></p>
+                            <ul class="text-muted small mb-0">
+                                <li>Credit card accounts</li>
+                                <li><span class="text-danger">Positive</span> = Expense (charges)</li>
+                                <li><span class="text-success">Negative</span> = Income (payments/refunds)</li>
+                            </ul>
+                        </div>
+                        
+                        <hr>
+                        <p class="text-muted small mb-0">
+                            <i class="bi bi-lightbulb"></i> The account type determines how transaction amounts are interpreted during import.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const accountType = document.getElementById('account_type');
+    const helpText = document.getElementById('account_type_help');
+    
+    function updateHelpText() {
+        if (accountType.value === 'credit_card') {
+            helpText.innerHTML = '<span class="text-danger">Positive</span> = Expense, <span class="text-success">Negative</span> = Income/Payment';
+        } else {
+            helpText.innerHTML = '<span class="text-danger">Negative</span> = Expense, <span class="text-success">Positive</span> = Income';
+        }
+    }
+    
+    accountType.addEventListener('change', updateHelpText);
+    updateHelpText(); // Set initial state
+});
+</script>
+{% endblock %}
+

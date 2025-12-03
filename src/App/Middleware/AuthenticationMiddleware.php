@@ -36,12 +36,6 @@ class AuthenticationMiddleware
             return $this->redirectToLogin();
         }
 
-        // Check if this is an admin route
-        $path = $request->getUri()->getPath();
-        if (str_starts_with($path, '/admin') && !$userData['is_admin']) {
-            return $this->redirectToHome();
-        }
-
         // Extend token expiry
         $this->auth->extendTokenExpiry($token);
 

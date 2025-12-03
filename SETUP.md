@@ -104,3 +104,5 @@ Main configuration is in `config/config.ini`. Sections:
 3. Add PDF/CSV import functionality
 4. Configure Akaunting API integration
 
+
+

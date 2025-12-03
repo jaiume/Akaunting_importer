@@ -1,0 +1,900 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Batch Details - {{ batch.batch_name }} - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .status-badge {
+        font-size: 0.875rem;
+    }
+    .transaction-table {
+        font-size: 0.9rem;
+    }
+    .amount-credit {
+        color: #198754;
+    }
+    .amount-debit {
+        color: #dc3545;
+    }
+    .batch-summary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 0.5rem;
+    }
+    .transaction-table tbody tr {
+        border-bottom: 1px solid #dee2e6;
+    }
+    .transaction-table tbody tr.has-match {
+        border-bottom: 1px dashed #ccc;
+    }
+    .transaction-table tbody tr.row-odd td {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+    .transaction-table tbody tr.row-even td {
+        background-color: #fff;
+    }
+    .match-row {
+        font-size: 0.85rem;
+    }
+    .match-row td {
+        padding-top: 0.25rem !important;
+        padding-bottom: 0.25rem !important;
+        color: #6c757d;
+        font-style: italic;
+    }
+    .push-row td {
+        padding: 0 !important;
+        border-top: 1px dashed #ccc;
+    }
+    .push-row .push-form {
+        background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%);
+        border-radius: 0;
+    }
+    .push-row .form-label {
+        font-weight: 500;
+        color: #495057;
+    }
+    .btn-outline-primary.p-0 {
+        line-height: 1;
+        font-size: 0.8rem;
+    }
+    .match-stats {
+        font-size: 0.85rem;
+    }
+    .match-stats-bar {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
+    .match-stats-bar .stat-item {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 1.5rem;
+        font-size: 0.85rem;
+    }
+    .match-stats-bar .stat-label {
+        color: #6c757d;
+        margin-right: 0.35rem;
+    }
+    .match-stats-bar .stat-value {
+        font-weight: 600;
+    }
+    .match-stats-bar .confidence-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .match-badge {
+        font-size: 0.7rem;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}import">Import</a></li>
+                <li class="breadcrumb-item active">Batch #{{ batch.batch_id }}</li>
+            </ol>
+        </nav>
+        
+        <h1 class="mb-4">
+            <i class="bi bi-file-earmark-text"></i> {{ batch.batch_name }}
+        </h1>
+        
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {% if success == 'uploaded' %}
+                <i class="bi bi-check-circle"></i> File uploaded successfully! Click "Process Batch" to extract transactions.
+            {% elseif success == 'processed' %}
+                <i class="bi bi-check-circle"></i> Batch processed successfully! {{ transactions|length }} transactions extracted.
+            {% else %}
+                <i class="bi bi-check-circle"></i> {{ success }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'processing_failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to process batch. Please check the file format and try again.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        <div class="row mb-4">
+            <div class="col-lg-8">
+                <div class="card batch-summary">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Entity:</strong> {{ batch.entity_name }}</p>
+                                <p class="mb-1"><strong>Account:</strong> {{ batch.account_name }}</p>
+                                <p class="mb-1"><strong>Import Type:</strong> {{ batch.batch_import_type }}</p>
+                                <p class="mb-0"><strong>Processor:</strong> {{ batch.import_processor }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Status:</strong> 
+                                    {% if batch.status == 'pending' %}
+                                        <span class="badge bg-warning status-badge">Pending</span>
+                                    {% elseif batch.status == 'processing' %}
+                                        <span class="badge bg-info status-badge">Processing</span>
+                                    {% elseif batch.status == 'completed' %}
+                                        <span class="badge bg-success status-badge">Completed</span>
+                                    {% elseif batch.status == 'failed' %}
+                                        <span class="badge bg-danger status-badge">Failed</span>
+                                    {% endif %}
+                                </p>
+                                <p class="mb-1"><strong>Transactions:</strong> {{ batch.total_transactions }}</p>
+                                <p class="mb-1"><strong>Import Date:</strong> {{ batch.batch_import_datetime }}</p>
+                                <p class="mb-0"><strong>File:</strong> {{ batch.batch_import_filename }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Actions</h5>
+                        
+                        {% if batch.status == 'pending' %}
+                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/process" class="mb-2">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-play-fill"></i> Process Batch
+                            </button>
+                        </form>
+                        {% elseif batch.status == 'failed' %}
+                        <div class="alert alert-danger mb-3">
+                            <strong><i class="bi bi-exclamation-triangle"></i> Processing Failed</strong>
+                            {% if batch.error_message %}
+                            <p class="mb-0 mt-2 small">{{ batch.error_message }}</p>
+                            {% endif %}
+                        </div>
+                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/process" class="mb-2">
+                            <button type="submit" class="btn btn-warning w-100">
+                                <i class="bi bi-arrow-repeat"></i> Retry Processing
+                            </button>
+                        </form>
+                        {% elseif batch.status == 'completed' %}
+                            {% if can_match %}
+                            <button type="button" id="matchBtn" class="btn btn-info w-100 mb-2" onclick="startMatching()">
+                                <i class="bi bi-link-45deg"></i> Match with Akaunting
+                            </button>
+                            
+                            <!-- Progress display (hidden initially) -->
+                            <div id="matchProgress" class="mb-2" style="display: none;">
+                                <div class="progress mb-2" style="height: 20px;">
+                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <small id="progressText" class="text-muted d-block text-center"></small>
+                            </div>
+                            
+                            {% if match_stats.matched > 0 %}
+                            <button type="button" id="clearBtn" class="btn btn-outline-warning w-100 mb-2" onclick="clearMatches()">
+                                <i class="bi bi-x-circle"></i> Clear Matches
+                            </button>
+                            {% endif %}
+                            {% else %}
+                            <div class="alert alert-secondary mb-2">
+                                <small><i class="bi bi-info-circle"></i> {{ match_reason }}</small>
+                            </div>
+                            {% endif %}
+                            
+                            <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/reimport" class="mb-2" onsubmit="return confirm('This will delete all existing transactions and re-import from the original file. Continue?');">
+                                <button type="submit" class="btn btn-outline-secondary w-100">
+                                    <i class="bi bi-arrow-clockwise"></i> Re-import File
+                                </button>
+                            </form>
+                        {% endif %}
+                        
+                        <a href="{{ base_url }}dashboard" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-arrow-left"></i> Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if batch.error_message %}
+        <div class="alert alert-danger">
+            <strong>Error Message:</strong> {{ batch.error_message }}
+        </div>
+        {% endif %}
+        
+        {% if batch.status == 'completed' and match_stats.total > 0 %}
+        <div class="match-stats-bar mb-3 d-flex flex-wrap align-items-center justify-content-between">
+            <div class="d-flex flex-wrap align-items-center">
+                <span class="stat-item">
+                    <span class="stat-label"><i class="bi bi-bar-chart me-1"></i>Total:</span>
+                    <span class="stat-value">{{ match_stats.total }}</span>
+                </span>
+                <span class="stat-item">
+                    <span class="stat-label">Matched:</span>
+                    <span class="stat-value text-success">{{ match_stats.matched }}</span>
+                </span>
+                <span class="stat-item">
+                    <span class="stat-label">Unmatched:</span>
+                    <span class="stat-value text-muted">{{ match_stats.total - match_stats.matched }}</span>
+                </span>
+                <span class="confidence-group">
+                    <span class="badge bg-success" title="High Confidence">H: {{ match_stats.high_confidence }}</span>
+                    <span class="badge bg-warning text-dark" title="Medium Confidence">M: {{ match_stats.medium_confidence }}</span>
+                    <span class="badge bg-danger" title="Low Confidence">L: {{ match_stats.low_confidence }}</span>
+                </span>
+            </div>
+            <div class="d-flex align-items-center">
+                {% set match_pct = (match_stats.matched / match_stats.total * 100)|round %}
+                <div class="progress me-2" style="width: 100px; height: 8px;">
+                    <div class="progress-bar bg-success" style="width: {{ match_pct }}%"></div>
+                </div>
+                <small class="text-muted">{{ match_pct }}%</small>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if transactions|length > 0 %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-list-ul"></i> Transactions ({{ transactions|length }})</h5>
+                <div class="d-flex align-items-center gap-3">
+                    {% if match_stats.matched > 0 %}
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="showUnmatchedOnly" onchange="toggleUnmatchedFilter()">
+                        <label class="form-check-label small" for="showUnmatchedOnly">Show unmatched only</label>
+                    </div>
+                    <span class="badge bg-info">{{ match_stats.matched }} matched</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover transaction-table mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 110px;">Date</th>
+                                <th style="width: 120px;">Reference</th>
+                                <th>Description</th>
+                                <th class="text-end" style="width: 130px;">Amount</th>
+                                <th style="width: 90px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for txn in transactions %}
+                            {% set row_class = loop.index is odd ? 'row-odd' : 'row-even' %}
+                            <tr class="{{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}">
+                                <td>{{ txn.transaction_date }}</td>
+                                <td>{{ txn.bank_ref ?: '-' }}</td>
+                                <td>{{ txn.description }}</td>
+                                <td class="text-end {% if txn.transaction_amount < 0 %}amount-debit{% else %}amount-credit{% endif %}">
+                                    {{ txn.transaction_currency }} {{ txn.transaction_amount|number_format(2) }}
+                                </td>
+                                <td class="d-flex align-items-center gap-2">
+                                    {% if txn.status == 'pending' %}
+                                        <span class="badge bg-warning">Pending</span>
+                                    {% elseif txn.status == 'processed' %}
+                                        <span class="badge bg-success">Processed</span>
+                                    {% elseif txn.status == 'error' %}
+                                        <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                    {% if not txn.matched_akaunting_id and can_match %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary p-0 px-1" 
+                                                onclick="togglePushRow({{ txn.transaction_id }})" 
+                                                title="Push to Akaunting">
+                                            <i class="bi bi-cloud-upload"></i>
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {# Push to Akaunting row (hidden by default) #}
+                            {% if not txn.matched_akaunting_id and can_match %}
+                            <tr class="push-row {{ row_class }}" id="push-row-{{ txn.transaction_id }}" style="display: none;">
+                                <td colspan="5">
+                                    <div class="push-form p-3 border-top">
+                                        <form id="push-form-{{ txn.transaction_id }}" onsubmit="return pushToAkaunting({{ txn.transaction_id }}, event)">
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Date</label>
+                                                    <input type="date" class="form-control form-control-sm" name="date" 
+                                                           value="{{ txn.transaction_date }}" required>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Reference</label>
+                                                    <input type="text" class="form-control form-control-sm" name="reference" 
+                                                           value="{{ txn.bank_ref }}" style="width: 100px;">
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Type</label>
+                                                    {# Bank: negative=expense, positive=income #}
+                                                    {# Credit Card: negative=income, positive=expense #}
+                                                    {% if account_type == 'credit_card' %}
+                                                        {% set is_expense = txn.transaction_amount >= 0 %}
+                                                    {% else %}
+                                                        {% set is_expense = txn.transaction_amount < 0 %}
+                                                    {% endif %}
+                                                    <select class="form-select form-select-sm type-select" name="type" 
+                                                            id="type-select-{{ txn.transaction_id }}"
+                                                            onchange="onTypeChange({{ txn.transaction_id }})"
+                                                            style="width: 95px;">
+                                                        <option value="expense" {% if is_expense %}selected{% endif %}>Expense</option>
+                                                        <option value="income" {% if not is_expense %}selected{% endif %}>Income</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col">
+                                                    <label class="form-label small mb-0" id="contact-label-{{ txn.transaction_id }}">{% if is_expense %}Vendor{% else %}Customer{% endif %}</label>
+                                                    <select class="form-select form-select-sm contact-select" name="contact_id" 
+                                                            id="contact-select-{{ txn.transaction_id }}"
+                                                            data-description="{{ txn.description }}"
+                                                            required>
+                                                        <option value="">Loading...</option>
+                                                    </select>
+                                                    <input type="hidden" name="contact" id="contact-name-{{ txn.transaction_id }}">
+                                                </div>
+                                                <div class="col">
+                                                    <label class="form-label small mb-0">Category</label>
+                                                    <select class="form-select form-select-sm category-select" name="category_id" 
+                                                            id="category-select-{{ txn.transaction_id }}"
+                                                            required>
+                                                        <option value="">Loading...</option>
+                                                    </select>
+                                                    <input type="hidden" name="category_name" id="category-name-{{ txn.transaction_id }}">
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Payment</label>
+                                                    <select class="form-select form-select-sm payment-select" name="payment_method" 
+                                                            id="payment-select-{{ txn.transaction_id }}"
+                                                            style="width: 130px;"
+                                                            required>
+                                                        <option value="">Loading...</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Amount</label>
+                                                    <input type="number" step="0.01" class="form-control form-control-sm" name="amount" 
+                                                           value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 100px;" required>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <button type="submit" class="btn btn-sm btn-primary">
+                                                        <i class="bi bi-send"></i> Send
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePushRow({{ txn.transaction_id }})">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% if txn.matched_akaunting_id %}
+                            <tr class="match-row {{ row_class }}">
+                                <td>{{ txn.matched_akaunting_date }}</td>
+                                <td>IMP-TRA-{{ txn.transaction_id }}</td>
+                                <td>
+                                    {% if txn.matched_akaunting_contact %}
+                                        {{ txn.matched_akaunting_contact }}
+                                    {% endif %}
+                                    {% if txn.matched_akaunting_category %}
+                                        ({{ txn.matched_akaunting_category }})
+                                    {% endif %}
+                                    {% if not txn.matched_akaunting_contact and not txn.matched_akaunting_category %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {{ txn.transaction_currency }} {{ txn.matched_akaunting_amount|number_format(2) }}
+                                </td>
+                                <td>
+                                    <span class="badge {% if txn.match_confidence == 'high' %}bg-success{% elseif txn.match_confidence == 'medium' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                        {{ txn.match_confidence|upper }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-inbox fs-1 text-muted"></i>
+                <p class="text-muted mt-3 mb-0">
+                    {% if batch.status == 'pending' %}
+                        No transactions extracted yet. Click "Process Batch" to extract transactions from the uploaded file.
+                    {% else %}
+                        No transactions found in this batch.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const batchId = {{ batch.batch_id }};
+const baseUrl = '{{ base_url }}';
+let isMatching = false;
+
+// Check URL for unmatched filter state on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('unmatched') === '1') {
+        const checkbox = document.getElementById('showUnmatchedOnly');
+        if (checkbox) {
+            checkbox.checked = true;
+            toggleUnmatchedFilter();
+        }
+    }
+});
+
+// Helper to get current filter state for redirects
+function getFilterParams() {
+    const checkbox = document.getElementById('showUnmatchedOnly');
+    return (checkbox && checkbox.checked) ? '&unmatched=1' : '';
+}
+
+function startMatching() {
+    if (isMatching) return;
+    isMatching = true;
+    
+    // Update UI
+    document.getElementById('matchBtn').disabled = true;
+    document.getElementById('matchBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Matching...';
+    document.getElementById('matchProgress').style.display = 'block';
+    
+    const clearBtn = document.getElementById('clearBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    
+    // Start the matching process
+    processMatchStep();
+}
+
+function processMatchStep() {
+    fetch(baseUrl + 'import/batch/' + batchId + '/match-progress', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        updateProgress(data);
+        
+        if (data.status === 'fetching' || data.status === 'matching') {
+            // Continue processing
+            setTimeout(processMatchStep, 100);
+        } else if (data.status === 'complete') {
+            // Done - reload page to show results
+            setTimeout(() => {
+                window.location.href = baseUrl + 'import/batch/' + batchId + '?success=' + encodeURIComponent(data.message);
+            }, 500);
+        } else if (data.status === 'error') {
+            showError(data.message);
+        }
+    })
+    .catch(error => {
+        showError('Request failed: ' + error.message);
+    });
+}
+
+function updateProgress(data) {
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    let percent = 0;
+    let message = data.message || 'Processing...';
+    
+    if (data.status === 'fetching') {
+        const currentPage = data.current_page || 0;
+        const totalPages = data.total_pages || 1;
+        percent = Math.round((currentPage / totalPages) * 80); // 0-80% for fetching
+        message = `Fetching from Akaunting: page ${currentPage} of ${totalPages} (${data.fetched_count || 0} transactions)`;
+    } else if (data.status === 'matching') {
+        percent = 90;
+        message = `Matching ${data.fetched_count || 0} Akaunting transactions...`;
+    } else if (data.status === 'complete') {
+        percent = 100;
+        progressBar.classList.remove('progress-bar-animated');
+        progressBar.classList.add('bg-success');
+        message = `✓ ${data.message}`;
+    }
+    
+    progressBar.style.width = percent + '%';
+    progressBar.setAttribute('aria-valuenow', percent);
+    progressText.textContent = message;
+}
+
+function showError(message) {
+    isMatching = false;
+    
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    progressBar.classList.remove('progress-bar-animated');
+    progressBar.classList.add('bg-danger');
+    progressBar.style.width = '100%';
+    progressText.innerHTML = '<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> ' + message + '</span>';
+    
+    document.getElementById('matchBtn').disabled = false;
+    document.getElementById('matchBtn').innerHTML = '<i class="bi bi-arrow-repeat"></i> Retry Matching';
+    
+    const clearBtn = document.getElementById('clearBtn');
+    if (clearBtn) clearBtn.style.display = 'block';
+}
+
+function clearMatches() {
+    if (!confirm('Are you sure you want to clear all matches?')) return;
+    
+    // First reset the job
+    fetch(baseUrl + 'import/batch/' + batchId + '/match-reset', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        window.location.href = baseUrl + 'import/batch/' + batchId + '?success=Matches+cleared';
+    })
+    .catch(error => {
+        alert('Failed to clear matches: ' + error.message);
+    });
+}
+
+function toggleUnmatchedFilter() {
+    const checkbox = document.getElementById('showUnmatchedOnly');
+    const rows = document.querySelectorAll('.transaction-table tbody tr');
+    
+    rows.forEach(row => {
+        if (checkbox.checked) {
+            // Show only unmatched - hide matched rows and their match-row siblings
+            if (row.classList.contains('has-match') || row.classList.contains('match-row')) {
+                row.style.display = 'none';
+            } else if (!row.classList.contains('push-row')) {
+                row.style.display = '';
+            }
+        } else {
+            // Show all except push-rows (they're toggled separately)
+            if (!row.classList.contains('push-row')) {
+                row.style.display = '';
+            }
+        }
+    });
+    
+    // Update the visible count in header
+    const visibleCount = document.querySelectorAll('.transaction-table tbody tr:not(.match-row):not(.push-row):not([style*="display: none"])').length;
+    const headerTitle = document.querySelector('.card-header h5');
+    if (headerTitle) {
+        const totalCount = {{ transactions|length }};
+        if (checkbox.checked) {
+            headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + visibleCount + ' of ' + totalCount + ')';
+        } else {
+            headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + totalCount + ')';
+        }
+    }
+}
+
+let formDataCache = null;
+let formDataLoading = false;
+
+function togglePushRow(transactionId) {
+    const pushRow = document.getElementById('push-row-' + transactionId);
+    if (pushRow) {
+        if (pushRow.style.display === 'none') {
+            // Close any other open push rows first
+            document.querySelectorAll('.push-row').forEach(row => {
+                row.style.display = 'none';
+            });
+            pushRow.style.display = '';
+            
+            // Load form data for this row
+            loadFormDataForRow(transactionId);
+        } else {
+            pushRow.style.display = 'none';
+        }
+    }
+}
+
+function loadFormDataForRow(transactionId) {
+    const contactSelect = document.getElementById('contact-select-' + transactionId);
+    const categorySelect = document.getElementById('category-select-' + transactionId);
+    const paymentSelect = document.getElementById('payment-select-' + transactionId);
+    const description = contactSelect.dataset.description || '';
+    
+    // If we already have cached data, use it
+    if (formDataCache) {
+        populateFormSelects(transactionId, formDataCache, description);
+        return;
+    }
+    
+    // If already loading, wait
+    if (formDataLoading) {
+        setTimeout(() => loadFormDataForRow(transactionId), 100);
+        return;
+    }
+    
+    formDataLoading = true;
+    contactSelect.innerHTML = '<option value="">Loading...</option>';
+    categorySelect.innerHTML = '<option value="">Loading...</option>';
+    paymentSelect.innerHTML = '<option value="">Loading...</option>';
+    
+    fetch(baseUrl + 'import/batch/' + batchId + '/vendors?description=' + encodeURIComponent(description), {
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        formDataLoading = false;
+        if (data.success) {
+            formDataCache = {
+                vendors: data.vendors || [],
+                customers: data.customers || [],
+                categories: data.categories || [],
+                payment_methods: data.payment_methods || [],
+                suggested: data.suggested
+            };
+            populateFormSelects(transactionId, formDataCache, description);
+        } else {
+            contactSelect.innerHTML = '<option value="">Error loading</option>';
+            categorySelect.innerHTML = '<option value="">Error loading</option>';
+            paymentSelect.innerHTML = '<option value="">Error loading</option>';
+        }
+    })
+    .catch(error => {
+        formDataLoading = false;
+        console.error('Error loading form data:', error);
+        contactSelect.innerHTML = '<option value="">Error loading</option>';
+        categorySelect.innerHTML = '<option value="">Error loading</option>';
+        paymentSelect.innerHTML = '<option value="">Error loading</option>';
+    });
+}
+
+function populateFormSelects(transactionId, data, description) {
+    // Get the type select to determine contact type (vendor/customer) and category filter
+    const typeSelect = document.getElementById('type-select-' + transactionId);
+    const selectedType = typeSelect ? typeSelect.value : 'expense';
+    
+    // Populate contacts (vendors for expense, customers for income)
+    populateContactSelect(transactionId, data, selectedType);
+    
+    // Populate categories (filtered by type)
+    populateCategorySelect(transactionId, data, selectedType);
+    
+    // Populate payment methods
+    populatePaymentSelect(transactionId, data);
+}
+
+// Called when transaction type changes
+function onTypeChange(transactionId) {
+    const typeSelect = document.getElementById('type-select-' + transactionId);
+    const selectedType = typeSelect ? typeSelect.value : 'expense';
+    
+    // Update contact label and dropdown
+    const contactLabel = document.getElementById('contact-label-' + transactionId);
+    if (contactLabel) {
+        contactLabel.textContent = selectedType === 'expense' ? 'Vendor' : 'Customer';
+    }
+    
+    // Re-populate contacts with correct type
+    if (formDataCache) {
+        populateContactSelect(transactionId, formDataCache, selectedType);
+        populateCategorySelect(transactionId, formDataCache, selectedType);
+    }
+}
+
+function populateContactSelect(transactionId, data, type) {
+    const select = document.getElementById('contact-select-' + transactionId);
+    const hiddenInput = document.getElementById('contact-name-' + transactionId);
+    
+    // Use vendors for expense, customers for income
+    const isExpense = type === 'expense';
+    const contacts = isExpense ? (data.vendors || []) : (data.customers || []);
+    const label = isExpense ? 'Vendor' : 'Customer';
+    
+    // Clear and add placeholder
+    select.innerHTML = '<option value="">-- Select ' + label + ' --</option>';
+    
+    // Check for suggested contact
+    let suggestedId = data.suggested?.vendor_id || null;
+    
+    // Add all contacts
+    contacts.forEach(contact => {
+        const option = document.createElement('option');
+        option.value = contact.akaunting_contact_id;
+        option.textContent = contact.name;
+        option.dataset.name = contact.name;
+        
+        // Pre-select if suggested (only for expense/vendor)
+        if (isExpense && suggestedId && contact.akaunting_contact_id == suggestedId) {
+            option.selected = true;
+            hiddenInput.value = contact.name;
+        }
+        
+        select.appendChild(option);
+    });
+    
+    // Add change handler to update hidden input
+    select.onchange = function() {
+        const selectedOption = this.options[this.selectedIndex];
+        hiddenInput.value = selectedOption.dataset.name || '';
+    };
+}
+
+function populateCategorySelect(transactionId, data, type) {
+    const select = document.getElementById('category-select-' + transactionId);
+    const hiddenInput = document.getElementById('category-name-' + transactionId);
+    
+    // Clear and add placeholder
+    select.innerHTML = '<option value="">-- Select Category --</option>';
+    
+    // Check for suggested category
+    let suggestedId = data.suggested?.category_id || null;
+    
+    // Filter categories by type (expense/income)
+    const filteredCategories = (data.categories || []).filter(cat => {
+        return !cat.type || cat.type === type || cat.type === 'other';
+    });
+    
+    // Add categories
+    filteredCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category.akaunting_category_id;
+        option.textContent = category.name;
+        option.dataset.name = category.name;
+        
+        // Pre-select if suggested
+        if (suggestedId && category.akaunting_category_id == suggestedId) {
+            option.selected = true;
+            hiddenInput.value = category.name;
+        }
+        
+        select.appendChild(option);
+    });
+    
+    // Add change handler to update hidden input
+    select.onchange = function() {
+        const selectedOption = this.options[this.selectedIndex];
+        hiddenInput.value = selectedOption.dataset.name || '';
+    };
+}
+
+function populatePaymentSelect(transactionId, data) {
+    const select = document.getElementById('payment-select-' + transactionId);
+    
+    // Clear and add placeholder
+    select.innerHTML = '<option value="">-- Select --</option>';
+    
+    // Check for suggested payment method
+    let suggestedMethod = data.suggested?.payment_method || 'bank_transfer';
+    
+    // Add payment methods
+    (data.payment_methods || []).forEach(method => {
+        const option = document.createElement('option');
+        option.value = method.code;
+        option.textContent = method.name;
+        
+        // Pre-select if suggested or default
+        if (method.code === suggestedMethod) {
+            option.selected = true;
+        }
+        
+        select.appendChild(option);
+    });
+    
+    // If no payment methods loaded, add defaults
+    if (!data.payment_methods || data.payment_methods.length === 0) {
+        const defaults = [
+            {code: 'cash', name: 'Cash'},
+            {code: 'bank_transfer', name: 'Bank Transfer'},
+            {code: 'credit_card', name: 'Credit Card'}
+        ];
+        defaults.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.code;
+            option.textContent = method.name;
+            if (method.code === 'bank_transfer') option.selected = true;
+            select.appendChild(option);
+        });
+    }
+}
+
+function pushToAkaunting(transactionId, event) {
+    event.preventDefault();
+    
+    const form = document.getElementById('push-form-' + transactionId);
+    const formData = new FormData(form);
+    const data = {
+        transaction_id: transactionId,
+        date: formData.get('date'),
+        reference: formData.get('reference'),
+        contact_id: parseInt(formData.get('contact_id')) || null,
+        contact: formData.get('contact'),
+        category_id: parseInt(formData.get('category_id')) || 1,
+        category_name: formData.get('category_name'),
+        payment_method: formData.get('payment_method') || 'bank_transfer',
+        type: formData.get('type'),
+        amount: parseFloat(formData.get('amount'))
+    };
+    
+    // Validate required fields
+    if (!data.contact_id) {
+        alert('Please select a vendor');
+        return false;
+    }
+    if (!data.category_id) {
+        alert('Please select a category');
+        return false;
+    }
+    
+    // Disable the submit button
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    fetch(baseUrl + 'import/batch/' + batchId + '/push-transaction', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Success - reload page to show updated status, preserving filter state
+            window.location.href = baseUrl + 'import/batch/' + batchId + '?success=' + encodeURIComponent('Transaction pushed to Akaunting') + getFilterParams();
+        } else {
+            alert('Error: ' + (result.message || 'Failed to push transaction'));
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalHtml;
+    });
+    
+    return false;
+}
+</script>
+{% endblock %}

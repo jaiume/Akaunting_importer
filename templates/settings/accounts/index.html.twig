@@ -1,0 +1,160 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Manage Accounts - Settings - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings">Settings</a></li>
+                <li class="breadcrumb-item active">Accounts</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">
+                <i class="bi bi-wallet2"></i> Bank Accounts
+            </h1>
+            <a href="{{ base_url }}settings/accounts/create" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Add Account
+            </a>
+        </div>
+        
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {% if success == 'created' %}
+                <i class="bi bi-check-circle"></i> Account created successfully!
+            {% elseif success == 'updated' %}
+                <i class="bi bi-check-circle"></i> Account updated successfully!
+            {% elseif success == 'deleted' %}
+                <i class="bi bi-check-circle"></i> Account deleted successfully!
+            {% else %}
+                <i class="bi bi-check-circle"></i> {{ success }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'not_found' %}
+                <i class="bi bi-exclamation-triangle"></i> Account not found.
+            {% elseif error == 'has_batches' %}
+                <i class="bi bi-exclamation-triangle"></i> Cannot delete account: it has associated import batches.
+            {% elseif error == 'delete_failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to delete account. Please try again.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if accounts|length > 0 %}
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Entity</th>
+                                <th>Account Name</th>
+                                <th>Type</th>
+                                <th>Currency</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for account in accounts %}
+                            <tr>
+                                <td>{{ account.entity_name }}</td>
+                                <td>
+                                    <strong>{{ account.account_name }}</strong>
+                                    {% if account.description %}
+                                    <br><small class="text-muted">{{ account.description }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if account.account_type == 'credit_card' %}
+                                        <i class="bi bi-credit-card text-warning"></i> Credit Card
+                                    {% else %}
+                                        <i class="bi bi-bank text-primary"></i> Bank
+                                    {% endif %}
+                                </td>
+                                <td>{{ account.currency }}</td>
+                                <td class="text-center">
+                                    {% if account.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ base_url }}settings/accounts/{{ account.account_id }}/edit" 
+                                           class="btn btn-outline-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <button type="button" class="btn btn-outline-danger" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteModal{{ account.account_id }}"
+                                                title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Delete Modal -->
+                                    <div class="modal fade" id="deleteModal{{ account.account_id }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Confirm Delete</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body text-start">
+                                                    <p>Are you sure you want to delete the account <strong>{{ account.account_name }}</strong> for <strong>{{ account.entity_name }}</strong>?</p>
+                                                    <p class="text-danger mb-0">This action cannot be undone.</p>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <form method="POST" action="{{ base_url }}settings/accounts/{{ account.account_id }}/delete" class="d-inline">
+                                                        <button type="submit" class="btn btn-danger">
+                                                            <i class="bi bi-trash"></i> Delete
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-wallet2 fs-1 text-muted"></i>
+                <p class="text-muted mt-3 mb-3">No accounts found. Create your first account to get started.</p>
+                <a href="{{ base_url }}settings/accounts/create" class="btn btn-primary">
+                    <i class="bi bi-plus-lg"></i> Add Account
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="mt-4">
+            <a href="{{ base_url }}settings" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Settings
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -3,73 +3,118 @@
 use Slim\App;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+
+// Controllers
+use App\Controllers\AuthController;
+use App\Controllers\DashboardController;
+use App\Controllers\SettingsController;
+use App\Controllers\EntityController;
+use App\Controllers\AccountController;
+use App\Controllers\InstallationController;
+use App\Controllers\ImportController;
+use App\Controllers\ApiController;
+
+// Middleware
 use App\Middleware\AuthenticationMiddleware;
-use Slim\Views\Twig;
 
 return function (App $app) {
     $container = $app->getContainer();
-    
-    // Apply authentication middleware to all routes except login/register
     $authMiddleware = $container->get(AuthenticationMiddleware::class);
+
+    // ===================
+    // Public Routes
+    // ===================
     
-    // Public routes (no authentication required)
-    $app->get('/', function (Request $request, Response $response) {
-        // If authenticated, show dashboard; otherwise redirect to login
-        $user = $request->getAttribute('user');
-        if ($user) {
-            return $response->withHeader('Location', '/dashboard')->withStatus(302);
-        }
-        return $response->withHeader('Location', '/login')->withStatus(302);
-    });
+    // Home redirect
+    $app->get('/', [DashboardController::class, 'home']);
     
-    $app->get('/login', function (Request $request, Response $response) use ($container) {
-        // Login page
-        $user = $request->getAttribute('user');
-        if ($user) {
-            return $response->withHeader('Location', '/dashboard')->withStatus(302);
-        }
+    // Authentication routes
+    $app->get('/login', [AuthController::class, 'showLogin']);
+    $app->post('/login', [AuthController::class, 'login']);
+    $app->get('/login/token/{token}', [AuthController::class, 'verifyToken']);
+    $app->get('/logout', [AuthController::class, 'logout']);
+
+    // ===================
+    // Protected Routes
+    // ===================
+    
+    $app->group('', function ($group) {
         
-        $view = $container->get('view');
-        return $view->render($response, 'login.html.twig');
-    });
-    
-    $app->post('/login', function (Request $request, Response $response) {
-        // Handle login POST
-        $data = $request->getParsedBody();
-        // TODO: Implement login logic
-        return $response->withHeader('Location', '/dashboard')->withStatus(302);
-    });
-    
-    // Protected routes (require authentication)
-    $app->group('', function ($group) use ($container) {
         // Dashboard
-        $group->get('/dashboard', function (Request $request, Response $response) use ($container) {
-            $user = $request->getAttribute('user');
-            $view = $container->get('view');
-            return $view->render($response, 'dashboard.html.twig', [
-                'user' => $user
-            ]);
-        });
+        $group->get('/dashboard', [DashboardController::class, 'index']);
         
-        // Admin routes
-        $group->group('/admin', function ($adminGroup) use ($container) {
-            $adminGroup->get('', function (Request $request, Response $response) use ($container) {
-                $user = $request->getAttribute('user');
-                $view = $container->get('view');
-                return $view->render($response, 'admin/dashboard.html.twig', [
-                    'user' => $user
-                ]);
-            });
-        });
+        // Settings
+        $group->get('/settings', [SettingsController::class, 'index']);
+        
+        // Entity Management (with accounts)
+        $group->get('/settings/entities', [EntityController::class, 'index']);
+        $group->get('/settings/entities/create', [EntityController::class, 'showCreate']);
+        $group->post('/settings/entities/create', [EntityController::class, 'create']);
+        $group->get('/settings/entities/{entity_id}/edit', [EntityController::class, 'showEdit']);
+        $group->post('/settings/entities/{entity_id}/edit', [EntityController::class, 'update']);
+        $group->post('/settings/entities/{entity_id}/delete', [EntityController::class, 'delete']);
+        
+        // Add account for specific entity
+        $group->get('/settings/entities/{entity_id}/accounts/create', [AccountController::class, 'showCreateForEntity']);
+        $group->post('/settings/entities/{entity_id}/accounts/create', [AccountController::class, 'createForEntity']);
+        
+        // Add installation for specific entity
+        $group->get('/settings/entities/{entity_id}/installations/create', [InstallationController::class, 'showCreateForEntity']);
+        $group->post('/settings/entities/{entity_id}/installations/create', [InstallationController::class, 'createForEntity']);
+        
+        // Account Management (standalone - redirects to entities page)
+        $group->get('/settings/accounts', [AccountController::class, 'index']);
+        $group->get('/settings/accounts/create', [AccountController::class, 'showCreate']);
+        $group->post('/settings/accounts/create', [AccountController::class, 'create']);
+        $group->get('/settings/accounts/{account_id}/edit', [AccountController::class, 'showEdit']);
+        $group->post('/settings/accounts/{account_id}/edit', [AccountController::class, 'update']);
+        $group->post('/settings/accounts/{account_id}/delete', [AccountController::class, 'delete']);
+        
+        // Akaunting Installation Management (standalone routes redirect to entities)
+        $group->get('/settings/installations', [InstallationController::class, 'index']);
+        $group->get('/settings/installations/create', [InstallationController::class, 'showCreate']);
+        $group->post('/settings/installations/create', [InstallationController::class, 'create']);
+        $group->get('/settings/installations/{installation_id}/edit', [InstallationController::class, 'showEdit']);
+        $group->post('/settings/installations/{installation_id}/edit', [InstallationController::class, 'update']);
+        $group->post('/settings/installations/{installation_id}/delete', [InstallationController::class, 'delete']);
+        $group->post('/settings/installations/{installation_id}/test', [InstallationController::class, 'testConnection']);
+        
+        // Import
+        $group->get('/import', [ImportController::class, 'showForm']);
+        $group->post('/import', [ImportController::class, 'import']);
+        $group->get('/import/batch/{batch_id}', [ImportController::class, 'showBatch']);
+        $group->post('/import/batch/{batch_id}/process', [ImportController::class, 'processBatch']);
+        $group->post('/import/batch/{batch_id}/match', [ImportController::class, 'matchBatch']);
+        $group->post('/import/batch/{batch_id}/clear-matches', [ImportController::class, 'clearMatches']);
+        $group->post('/import/batch/{batch_id}/match-progress', [ImportController::class, 'matchProgress']);
+        $group->post('/import/batch/{batch_id}/match-reset', [ImportController::class, 'matchReset']);
+        $group->post('/import/batch/{batch_id}/reimport', [ImportController::class, 'reimportBatch']);
+        $group->post('/import/batch/{batch_id}/push-transaction', [ImportController::class, 'pushTransaction']);
+        $group->get('/import/batch/{batch_id}/vendors', [ImportController::class, 'getVendors']);
         
     })->add($authMiddleware);
+
+    // ===================
+    // API Routes
+    // ===================
     
-    // API routes
-    $app->group('/api', function ($group) use ($container) {
-        // API routes here
+    $app->group('/api', function ($group) {
+        // Get local accounts by entity
+        $group->get('/accounts/{entity_name}', [ApiController::class, 'getAccountsByEntity']);
+        
+        // Akaunting integration
+        $group->get('/installations/{installation_id}/akaunting-accounts', [ApiController::class, 'getAkauntingAccounts']);
+        
+        // Account linking (links stored directly on accounts table)
+        $group->get('/accounts/{account_id}/link', [ApiController::class, 'getAccountLinks']);
+        $group->post('/accounts/{account_id}/link', [ApiController::class, 'saveAccountLink']);
+        $group->delete('/accounts/{account_id}/link', [ApiController::class, 'deleteAccountLink']);
     })->add($authMiddleware);
+
+    // ===================
+    // 404 Handler
+    // ===================
     
-    // Catch-all 404 handler
     $app->map(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], '/{routes:.+}', function (Request $request, Response $response) {
         $response->getBody()->write('Page not found');
         return $response->withStatus(404);

@@ -87,20 +87,16 @@
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
-                    {% if user.is_admin %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ base_url }}admin">
-                            <i class="bi bi-gear"></i> Admin
+                        <a class="nav-link" href="{{ base_url }}settings">
+                            <i class="bi bi-gear"></i> Settings
                         </a>
                     </li>
-                    {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle"></i> {{ user.name }}
+                            <i class="bi bi-person-circle"></i> {{ user.email }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                            <li><a class="dropdown-item" href="{{ base_url }}profile">Profile</a></li>
-                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ base_url }}logout">Logout</a></li>
                         </ul>
                     </li>

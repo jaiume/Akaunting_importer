@@ -1,0 +1,190 @@
+{% extends "base.html.twig" %}
+
+{% block title %}{{ mode == 'create' ? 'Add' : 'Edit' }} Akaunting Installation - Settings - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings">Settings</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings/entities">Entities</a></li>
+                <li class="breadcrumb-item active">{{ mode == 'create' ? 'Add Installation' : 'Edit Installation' }}</li>
+            </ol>
+        </nav>
+        
+        <h1 class="mb-4">
+            <i class="bi bi-{{ mode == 'create' ? 'plus-lg' : 'pencil' }}"></i> 
+            {{ mode == 'create' ? 'Add New Akaunting Installation' : 'Edit Akaunting Installation' }}
+        </h1>
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'name_required' %}
+                <i class="bi bi-exclamation-triangle"></i> Name is required.
+            {% elseif error == 'url_invalid' %}
+                <i class="bi bi-exclamation-triangle"></i> Please enter a valid URL.
+            {% elseif error == 'email_required' %}
+                <i class="bi bi-exclamation-triangle"></i> API Email is required.
+            {% elseif error == 'password_required' %}
+                <i class="bi bi-exclamation-triangle"></i> API Password is required.
+            {% elseif error == 'failed' %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to save installation. Please try again.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form method="POST" action="{% if entity_id is defined and mode == 'create' %}{{ base_url }}settings/entities/{{ entity_id }}/installations/create{% elseif mode == 'edit' %}{{ base_url }}settings/installations/{{ installation.installation_id }}/edit{% else %}{{ base_url }}settings/installations/create{% endif %}">
+                            
+                            <div class="mb-3">
+                                <label for="entity_id" class="form-label">Entity <span class="text-danger">*</span></label>
+                                <select class="form-select" id="entity_id" name="entity_id" required>
+                                    <option value="">Select an entity...</option>
+                                    {% for entity in entities %}
+                                        <option value="{{ entity.entity_id }}" 
+                                            {% if installation.entity_id == entity.entity_id %}selected{% endif %}>
+                                            {{ entity.entity_name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <small class="form-text text-muted">The entity this Akaunting installation belongs to.</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="name" 
+                                       name="name" 
+                                       value="{{ installation.name ?? '' }}"
+                                       required 
+                                       placeholder="e.g., Personal Akaunting, Production Server">
+                                <small class="form-text text-muted">A friendly name to identify this installation.</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea class="form-control" 
+                                          id="description" 
+                                          name="description" 
+                                          rows="2" 
+                                          placeholder="Optional description...">{{ installation.description ?? '' }}</textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="base_url" class="form-label">Base URL <span class="text-danger">*</span></label>
+                                <input type="url" 
+                                       class="form-control" 
+                                       id="base_url" 
+                                       name="base_url" 
+                                       value="{{ installation.base_url ?? '' }}"
+                                       required 
+                                       placeholder="https://akaunting.example.com">
+                                <small class="form-text text-muted">The full URL to your Akaunting installation (including https://).</small>
+                            </div>
+                            
+                            <hr class="my-4">
+                            <h5 class="mb-3"><i class="bi bi-key"></i> API Credentials</h5>
+                            
+                            <div class="mb-3">
+                                <label for="api_email" class="form-label">API Email <span class="text-danger">*</span></label>
+                                <input type="email" 
+                                       class="form-control" 
+                                       id="api_email" 
+                                       name="api_email" 
+                                       value="{{ installation.api_email ?? '' }}"
+                                       required 
+                                       placeholder="admin@example.com">
+                                <small class="form-text text-muted">The email address of the Akaunting user with API access.</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="api_password" class="form-label">
+                                    API Password 
+                                    {% if mode == 'create' %}<span class="text-danger">*</span>{% endif %}
+                                </label>
+                                <input type="password" 
+                                       class="form-control" 
+                                       id="api_password" 
+                                       name="api_password" 
+                                       {% if mode == 'create' %}required{% endif %}
+                                       placeholder="{% if mode == 'edit' %}Leave blank to keep existing password{% endif %}">
+                                <small class="form-text text-muted">
+                                    {% if mode == 'edit' %}
+                                        Leave blank to keep the existing password, or enter a new password to update it.
+                                    {% else %}
+                                        The password for the Akaunting user. This will be stored securely.
+                                    {% endif %}
+                                </small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                           {% if mode == 'create' or installation.is_active %}checked{% endif %}>
+                                    <label class="form-check-label" for="is_active">
+                                        Active
+                                    </label>
+                                    <small class="form-text text-muted d-block">Inactive installations won't be used for syncing.</small>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check-lg"></i> {{ mode == 'create' ? 'Create Installation' : 'Save Changes' }}
+                                </button>
+                                <a href="{{ base_url }}settings/entities" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-lg"></i> Cancel
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Help</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>What is an Akaunting Installation?</strong></p>
+                        <p class="text-muted">An Akaunting installation is a running instance of the Akaunting accounting software. Each entity can have one or more installations.</p>
+                        
+                        <p><strong>API Authentication</strong></p>
+                        <p class="text-muted">Akaunting uses HTTP Basic Authentication. You need to provide the email and password of an Akaunting user with appropriate API permissions.</p>
+                        
+                        <p><strong>Testing Connection</strong></p>
+                        <p class="text-muted mb-0">After saving, use the "Test Connection" button on the entities page to verify that the credentials are correct.</p>
+                    </div>
+                </div>
+                
+                {% if mode == 'edit' %}
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1"><strong>Created:</strong> {{ installation.created_at|date('M j, Y H:i') }}</p>
+                        <p class="mb-1"><strong>Updated:</strong> {{ installation.updated_at|date('M j, Y H:i') }}</p>
+                        {% if installation.last_sync %}
+                        <p class="mb-0"><strong>Last Sync:</strong> {{ installation.last_sync|date('M j, Y H:i') }}</p>
+                        {% else %}
+                        <p class="mb-0"><strong>Last Sync:</strong> <span class="text-muted">Never</span></p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

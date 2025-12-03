@@ -1,0 +1,347 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Import Batch - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .file-upload-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 0.375rem;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        background-color: #f8f9fa;
+    }
+    .file-upload-area:hover {
+        border-color: #4f46e5;
+        background-color: #f0f4ff;
+    }
+    .file-upload-area.dragover {
+        border-color: #4f46e5;
+        background-color: #e8edff;
+    }
+    .file-info {
+        display: none;
+        margin-top: 1rem;
+        padding: 0.75rem;
+        background-color: #e7f3ff;
+        border-radius: 0.375rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-upload"></i> Import Batch
+            {% if processor == 'rbl_credit_card' %}
+                - RBL Credit Card
+            {% elseif processor == 'rbl_bank' %}
+                - RBL Bank
+            {% endif %}
+        </h1>
+        
+        {% if not processor %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> 
+            No processor selected. Please go back to the dashboard and select an import type.
+            <a href="{{ base_url }}dashboard" class="btn btn-sm btn-primary ms-2">Go to Dashboard</a>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'missing_fields' %}
+                Please fill in all required fields.
+            {% elseif error == 'no_file' %}
+                Please select a file to upload.
+            {% elseif error == 'upload_error' %}
+                There was an error uploading the file. Please try again.
+            {% elseif error == 'invalid_file_type' %}
+                Invalid file type. Please upload a PDF or CSV file.
+            {% elseif error == 'invalid_processor' %}
+                Invalid processor type. Please select a valid import option.
+            {% elseif error == 'file_too_large' %}
+                File is too large. Maximum file size is 10MB.
+            {% elseif error == 'server_error' %}
+                A server error occurred. Please try again.
+            {% else %}
+                An error occurred. Please try again.
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            File uploaded successfully!
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-body">
+                        <form method="POST" action="{{ base_url }}import" enctype="multipart/form-data" id="importForm">
+                            <div class="mb-3">
+                                <label for="batch_name" class="form-label">Batch Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="batch_name" name="batch_name" required placeholder="e.g., January 2024 Bank Statement">
+                                <small class="form-text text-muted">A descriptive name for this import batch</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="entity_name" class="form-label">Entity <span class="text-danger">*</span></label>
+                                <select class="form-select" id="entity_name" name="entity_name" required>
+                                    <option value="">-- Select Entity --</option>
+                                    {% for entity in entities %}
+                                    <option value="{{ entity.entity_name }}">{{ entity.entity_name }}{% if entity.description %} - {{ entity.description }}{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="form-text text-muted">The entity this account belongs to</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="account_id" class="form-label">Account <span class="text-danger">*</span></label>
+                                <select class="form-select" id="account_id" name="account_id" required disabled>
+                                    <option value="">-- Select Account --</option>
+                                </select>
+                                <small class="form-text text-muted">The bank account for this import</small>
+                                <div id="accountLoading" class="spinner-border spinner-border-sm d-none" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            
+                            {% if processor %}
+                            <input type="hidden" id="processor" name="processor" value="{{ processor }}">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> 
+                                <strong>Import Type:</strong> 
+                                {% if processor == 'rbl_credit_card' %}
+                                    RBL Credit Card (Auto-detects CSV or PDF)
+                                {% elseif processor == 'rbl_bank' %}
+                                    RBL Bank (Auto-detects CSV or PDF)
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            
+                            <div class="mb-3">
+                                <label for="batch_import_datetime" class="form-label">Import Date/Time <span class="text-danger">*</span></label>
+                                <input type="datetime-local" class="form-control" id="batch_import_datetime" name="batch_import_datetime" required>
+                                <small class="form-text text-muted">When this statement was generated</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">File Upload <span class="text-danger">*</span></label>
+                                <div class="file-upload-area" id="fileUploadArea">
+                                    <i class="bi bi-cloud-upload fs-1 text-muted mb-2"></i>
+                                    <p class="mb-2">Drag and drop your file here, or click to browse</p>
+                                    <input type="file" class="d-none" id="import_file" name="import_file" accept=".pdf,.csv" required>
+                                    <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('import_file').click()">
+                                        <i class="bi bi-folder2-open"></i> Choose File
+                                    </button>
+                                    <div class="file-info" id="fileInfo">
+                                        <i class="bi bi-file-earmark"></i> <span id="fileName"></span> (<span id="fileSize"></span>)
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">Supported formats: PDF, CSV (Max file size: 10MB)</small>
+                                <div id="fileTypeInfo" class="mt-2 text-muted small"></div>
+                            </div>
+                            
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <a href="{{ base_url }}dashboard" class="btn btn-secondary">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-upload"></i> Upload and Create Batch
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Import Guidelines</h5>
+                    </div>
+                    <div class="card-body">
+                        <h6>PDF Statements</h6>
+                        <ul class="small">
+                            <li>Upload bank statement PDFs</li>
+                            <li>Ensure the PDF is readable and not password-protected</li>
+                            <li>Statements will be processed automatically</li>
+                        </ul>
+                        
+                        <h6 class="mt-3">CSV Files</h6>
+                        <ul class="small">
+                            <li>Use standard CSV format</li>
+                            <li>Include date, description, and amount columns</li>
+                            <li>First row should contain headers</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default datetime to now
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('batch_import_datetime').value = now.toISOString().slice(0, 16);
+    
+        // Load accounts when entity is selected
+        document.getElementById('entity_name').addEventListener('change', function() {
+            const entityName = this.value;
+            const accountSelect = document.getElementById('account_id');
+            const loading = document.getElementById('accountLoading');
+            
+            if (!entityName) {
+                accountSelect.disabled = true;
+                accountSelect.innerHTML = '<option value="">-- Select Account --</option>';
+                return;
+            }
+            
+            accountSelect.disabled = true;
+            loading.classList.remove('d-none');
+            accountSelect.innerHTML = '<option value="">Loading...</option>';
+            
+            // Fetch accounts via AJAX
+            fetch(`{{ base_url }}api/accounts/${encodeURIComponent(entityName)}`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.classList.add('d-none');
+                    accountSelect.innerHTML = '<option value="">-- Select Account --</option>';
+                    
+                    if (data.success && data.accounts) {
+                        data.accounts.forEach(account => {
+                            const option = document.createElement('option');
+                            option.value = account.account_id;
+                            let text = account.account_name;
+                            if (account.account_type) {
+                                text += ` (${account.account_type})`;
+                            }
+                            if (account.currency) {
+                                text += ` - ${account.currency}`;
+                            }
+                            option.textContent = text;
+                            accountSelect.appendChild(option);
+                        });
+                        accountSelect.disabled = false;
+                    } else {
+                        accountSelect.innerHTML = '<option value="">No accounts found</option>';
+                    }
+                })
+                .catch(error => {
+                    loading.classList.add('d-none');
+                    accountSelect.innerHTML = '<option value="">Error loading accounts</option>';
+                    console.error('Error:', error);
+                });
+        });
+    
+    // File upload handling
+    const fileInput = document.getElementById('import_file');
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    
+    // Click to upload
+    fileUploadArea.addEventListener('click', function(e) {
+        if (e.target !== fileInput) {
+            fileInput.click();
+        }
+    });
+    
+    // Drag and drop
+    fileUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        fileUploadArea.classList.add('dragover');
+    });
+    
+    fileUploadArea.addEventListener('dragleave', function() {
+        fileUploadArea.classList.remove('dragover');
+    });
+    
+    fileUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        fileUploadArea.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            fileInput.files = files;
+            handleFileSelect(files[0]);
+        }
+    });
+    
+    fileInput.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            handleFileSelect(this.files[0]);
+        }
+    });
+    
+    function handleFileSelect(file) {
+        // Validate file type
+        const validTypes = ['application/pdf', 'text/csv', 'application/vnd.ms-excel'];
+        const validExtensions = ['.pdf', '.csv'];
+        const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+        
+        if (!validTypes.includes(file.type) && !validExtensions.includes(fileExt)) {
+            alert('Please select a PDF or CSV file.');
+            fileInput.value = '';
+            return;
+        }
+        
+        // Validate file size (10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('File size must be less than 10MB.');
+            fileInput.value = '';
+            return;
+        }
+        
+        // Auto-detect file type and update processor info
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        const processorInput = document.getElementById('processor');
+        const fileTypeInfo = document.getElementById('fileTypeInfo');
+        
+        if (processorInput && fileTypeInfo) {
+            const processor = processorInput.value;
+            if (processor === 'rbl_credit_card') {
+                if (fileExtension === 'pdf') {
+                    fileTypeInfo.innerHTML = '<i class="bi bi-file-earmark-pdf text-danger"></i> Will use: RBL Credit Card PDF Processor';
+                } else if (fileExtension === 'csv') {
+                    fileTypeInfo.innerHTML = '<i class="bi bi-filetype-csv text-success"></i> Will use: RBL Credit Card CSV Processor';
+                }
+            } else if (processor === 'rbl_bank') {
+                if (fileExtension === 'pdf') {
+                    fileTypeInfo.innerHTML = '<i class="bi bi-file-earmark-pdf text-danger"></i> Will use: RBL Bank PDF Processor';
+                } else if (fileExtension === 'csv') {
+                    fileTypeInfo.innerHTML = '<i class="bi bi-filetype-csv text-success"></i> Will use: RBL Bank CSV Processor';
+                }
+            }
+        }
+        
+        // Show file info
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileInfo.style.display = 'block';
+    }
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+});
+</script>
+{% endblock %}
+

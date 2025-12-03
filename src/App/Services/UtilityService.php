@@ -28,8 +28,27 @@ class UtilityService
             $mail->SMTPAuth = true;
             $mail->Username = $this->config::get('mail.smtp_user');
             $mail->Password = $this->config::get('mail.smtp_pass');
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            
+            // Set encryption type from config
+            $encryption = $this->config::get('mail.smtp_encryption', 'tls');
+            if (strtolower($encryption) === 'tls') {
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            } elseif (strtolower($encryption) === 'ssl') {
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+            } else {
+                $mail->SMTPSecure = false;
+            }
+            
             $mail->Port = $this->config::get('mail.smtp_port');
+            
+            // Allow self-signed certificates
+            $mail->SMTPOptions = [
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                ]
+            ];
 
             // Recipients
             $mail->setFrom(
@@ -46,6 +65,7 @@ class UtilityService
             return $mail->send();
         } catch (Exception $e) {
             // Log error here
+            error_log('Email send error: ' . $e->getMessage());
             return false;
         }
     }

@@ -2,6 +2,25 @@
 
 {% block title %}Dashboard - Akaunting Importer{% endblock %}
 
+{% block styles %}
+<style>
+    .quick-actions .card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .quick-actions .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .batch-table {
+        font-size: 0.9rem;
+    }
+    .status-pending { color: #ffc107; }
+    .status-processing { color: #17a2b8; }
+    .status-completed { color: #28a745; }
+    .status-failed { color: #dc3545; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-12">
@@ -9,43 +28,127 @@
             <i class="bi bi-speedometer2"></i> Dashboard
         </h1>
         
-        <p class="lead">Welcome, {{ user.name }}!</p>
+        <p class="lead">Welcome, {{ user.email }}!</p>
         
-        <div class="row mt-4">
+        <!-- Quick Actions -->
+        <div class="row mt-4 quick-actions">
             <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card">
+                <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title">
-                            <i class="bi bi-file-earmark-pdf text-danger"></i> PDF Import
+                            <i class="bi bi-credit-card text-primary"></i> Import RBL Credit Card
                         </h5>
-                        <p class="card-text">Import bank statements from PDF files.</p>
-                        <a href="#" class="btn btn-primary">Import PDF</a>
+                        <p class="card-text">Import RBL Credit Card statements (CSV or PDF).</p>
+                        <a href="{{ base_url }}import?processor=rbl_credit_card" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Import
+                        </a>
                     </div>
                 </div>
             </div>
             
             <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card">
+                <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title">
-                            <i class="bi bi-filetype-csv text-success"></i> CSV Import
+                            <i class="bi bi-bank text-success"></i> Import RBL Bank
                         </h5>
-                        <p class="card-text">Import bank statements from CSV files.</p>
-                        <a href="#" class="btn btn-success">Import CSV</a>
+                        <p class="card-text">Import RBL Bank statements (CSV or PDF).</p>
+                        <a href="{{ base_url }}import?processor=rbl_bank" class="btn btn-success">
+                            <i class="bi bi-upload"></i> Import
+                        </a>
                     </div>
                 </div>
             </div>
             
             <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card">
+                <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title">
                             <i class="bi bi-gear text-info"></i> Settings
                         </h5>
-                        <p class="card-text">Configure your Akaunting installations.</p>
-                        <a href="#" class="btn btn-info">Settings</a>
+                        <p class="card-text">Manage entities, accounts, and installations.</p>
+                        <a href="{{ base_url }}settings" class="btn btn-info">
+                            <i class="bi bi-gear"></i> Settings
+                        </a>
                     </div>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Import Batches -->
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-collection"></i> Import Batches</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if batches|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover batch-table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Batch Name</th>
+                                <th>Entity / Account</th>
+                                <th>Type</th>
+                                <th class="text-center">Transactions</th>
+                                <th>Status</th>
+                                <th>Imported</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for batch in batches %}
+                            <tr>
+                                <td>
+                                    <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="text-decoration-none fw-medium">
+                                        {{ batch.batch_name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ batch.entity_name }}</small><br>
+                                    {{ batch.account_name }}
+                                </td>
+                                <td>
+                                    {% if batch.batch_import_type == 'PDF' %}
+                                        <i class="bi bi-file-earmark-pdf text-danger"></i>
+                                    {% else %}
+                                        <i class="bi bi-filetype-csv text-success"></i>
+                                    {% endif %}
+                                    {{ batch.batch_import_type }}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">{{ batch.total_transactions }}</span>
+                                </td>
+                                <td>
+                                    {% if batch.status == 'pending' %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pending</span>
+                                    {% elseif batch.status == 'processing' %}
+                                        <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Processing</span>
+                                    {% elseif batch.status == 'completed' %}
+                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
+                                    {% elseif batch.status == 'failed' %}
+                                        <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>{{ batch.batch_import_datetime|date('M j, Y') }}</small><br>
+                                    <small class="text-muted">{{ batch.batch_import_datetime|date('g:i A') }}</small>
+                                </td>
+                                <td class="text-end">
+                                    <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                    <p class="text-muted mt-3 mb-0">No import batches yet. Start by importing a statement above.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

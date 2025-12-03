@@ -1,0 +1,45 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Settings - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-gear"></i> Settings
+        </h1>
+        
+        <p class="lead text-muted">Manage your entities, bank accounts, and Akaunting installations.</p>
+        
+        <div class="row mt-4">
+            <div class="col-md-8 col-lg-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-building text-primary"></i> Entities Management
+                        </h5>
+                        <p class="card-text">
+                            Manage your real-world entities (companies, personal accounts), their bank accounts, 
+                            and Akaunting installations for transaction syncing.
+                        </p>
+                        <ul class="text-muted small mb-3">
+                            <li>Create and manage entities</li>
+                            <li>Add bank accounts and credit cards</li>
+                            <li>Configure Akaunting API connections</li>
+                        </ul>
+                        <a href="{{ base_url }}settings/entities" class="btn btn-primary">
+                            <i class="bi bi-building"></i> Manage Entities
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <a href="{{ base_url }}dashboard" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
