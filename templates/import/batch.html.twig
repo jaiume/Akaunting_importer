@@ -343,13 +343,18 @@
                                                     {% endif %}
                                                     <select class="form-select form-select-sm type-select" name="type" 
                                                             id="type-select-{{ txn.transaction_id }}"
-                                                            onchange="onTypeChange({{ txn.transaction_id }})"
+                                                            onchange="onTypeChange({{ txn.transaction_id }}, {{ txn.transaction_amount }})"
+                                                            data-amount="{{ txn.transaction_amount }}"
                                                             style="width: 95px;">
                                                         <option value="expense" {% if is_expense %}selected{% endif %}>Expense</option>
                                                         <option value="income" {% if not is_expense %}selected{% endif %}>Income</option>
+                                                        {% if account_type == 'bank' %}
+                                                        <option value="transfer">Transfer</option>
+                                                        {% endif %}
                                                     </select>
                                                 </div>
-                                                <div class="col">
+                                                {# Vendor/Customer and Category fields - shown for expense/income #}
+                                                <div class="col contact-category-fields" id="contact-category-{{ txn.transaction_id }}">
                                                     <label class="form-label small mb-0" id="contact-label-{{ txn.transaction_id }}">{% if is_expense %}Vendor{% else %}Customer{% endif %}</label>
                                                     <select class="form-select form-select-sm contact-select" name="contact_id" 
                                                             id="contact-select-{{ txn.transaction_id }}"
@@ -359,7 +364,7 @@
                                                     </select>
                                                     <input type="hidden" name="contact" id="contact-name-{{ txn.transaction_id }}">
                                                 </div>
-                                                <div class="col">
+                                                <div class="col contact-category-fields" id="category-field-{{ txn.transaction_id }}">
                                                     <label class="form-label small mb-0">Category</label>
                                                     <select class="form-select form-select-sm category-select" name="category_id" 
                                                             id="category-select-{{ txn.transaction_id }}"
@@ -367,6 +372,21 @@
                                                         <option value="">Loading...</option>
                                                     </select>
                                                     <input type="hidden" name="category_name" id="category-name-{{ txn.transaction_id }}">
+                                                </div>
+                                                {# Transfer fields - shown for transfer type, hidden by default #}
+                                                <div class="col transfer-fields" id="source-field-{{ txn.transaction_id }}" style="display: none;">
+                                                    <label class="form-label small mb-0">Source</label>
+                                                    <select class="form-select form-select-sm" name="from_account_id" 
+                                                            id="source-select-{{ txn.transaction_id }}">
+                                                        <option value="">Loading...</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col transfer-fields" id="dest-field-{{ txn.transaction_id }}" style="display: none;">
+                                                    <label class="form-label small mb-0">Destination</label>
+                                                    <select class="form-select form-select-sm" name="to_account_id" 
+                                                            id="dest-select-{{ txn.transaction_id }}">
+                                                        <option value="">Loading...</option>
+                                                    </select>
                                                 </div>
                                                 <div class="col-auto">
                                                     <label class="form-label small mb-0">Payment</label>
@@ -668,6 +688,7 @@ function loadFormDataForRow(transactionId) {
                 customers: data.customers || [],
                 categories: data.categories || [],
                 payment_methods: data.payment_methods || [],
+                akaunting_accounts: data.akaunting_accounts || [],
                 suggested: data.suggested
             };
             populateFormSelects(transactionId, formDataCache, description);
@@ -702,20 +723,102 @@ function populateFormSelects(transactionId, data, description) {
 }
 
 // Called when transaction type changes
-function onTypeChange(transactionId) {
+function onTypeChange(transactionId, amount) {
     const typeSelect = document.getElementById('type-select-' + transactionId);
     const selectedType = typeSelect ? typeSelect.value : 'expense';
     
-    // Update contact label and dropdown
-    const contactLabel = document.getElementById('contact-label-' + transactionId);
-    if (contactLabel) {
-        contactLabel.textContent = selectedType === 'expense' ? 'Vendor' : 'Customer';
-    }
+    // Get field containers
+    const contactCategoryField = document.getElementById('contact-category-' + transactionId);
+    const categoryField = document.getElementById('category-field-' + transactionId);
+    const sourceField = document.getElementById('source-field-' + transactionId);
+    const destField = document.getElementById('dest-field-' + transactionId);
+    const contactSelect = document.getElementById('contact-select-' + transactionId);
+    const categorySelect = document.getElementById('category-select-' + transactionId);
     
-    // Re-populate contacts with correct type
-    if (formDataCache) {
-        populateContactSelect(transactionId, formDataCache, selectedType);
-        populateCategorySelect(transactionId, formDataCache, selectedType);
+    if (selectedType === 'transfer') {
+        // Hide contact/category, show source/destination
+        if (contactCategoryField) contactCategoryField.style.display = 'none';
+        if (categoryField) categoryField.style.display = 'none';
+        if (sourceField) sourceField.style.display = '';
+        if (destField) destField.style.display = '';
+        
+        // Remove required from hidden fields
+        if (contactSelect) contactSelect.required = false;
+        if (categorySelect) categorySelect.required = false;
+        
+        // Populate transfer fields
+        if (formDataCache) {
+            // Get amount from data attribute if not passed
+            if (amount === undefined) {
+                amount = parseFloat(typeSelect.dataset.amount || 0);
+            }
+            populateTransferFields(transactionId, formDataCache, amount);
+        }
+    } else {
+        // Show contact/category, hide source/destination
+        if (contactCategoryField) contactCategoryField.style.display = '';
+        if (categoryField) categoryField.style.display = '';
+        if (sourceField) sourceField.style.display = 'none';
+        if (destField) destField.style.display = 'none';
+        
+        // Restore required on visible fields
+        if (contactSelect) contactSelect.required = true;
+        if (categorySelect) categorySelect.required = true;
+        
+        // Update contact label and dropdown
+        const contactLabel = document.getElementById('contact-label-' + transactionId);
+        if (contactLabel) {
+            contactLabel.textContent = selectedType === 'expense' ? 'Vendor' : 'Customer';
+        }
+        
+        // Re-populate contacts with correct type
+        if (formDataCache) {
+            populateContactSelect(transactionId, formDataCache, selectedType);
+            populateCategorySelect(transactionId, formDataCache, selectedType);
+        }
+    }
+}
+
+// Populate transfer source/destination fields
+function populateTransferFields(transactionId, data, amount) {
+    const sourceSelect = document.getElementById('source-select-' + transactionId);
+    const destSelect = document.getElementById('dest-select-' + transactionId);
+    const accounts = data.akaunting_accounts || [];
+    
+    // Current account info from template
+    const thisAccountId = {{ akaunting_account_id ?? 'null' }};
+    const thisAccountName = '{{ akaunting_account_name ?? "" }}';
+    
+    // Positive amount = money coming IN, so destination is this account, source is dropdown
+    // Negative amount = money going OUT, so source is this account, destination is dropdown
+    const isPositive = amount >= 0;
+    
+    if (isPositive) {
+        // Positive: destination = this account (fixed), source = dropdown
+        destSelect.innerHTML = '<option value="' + thisAccountId + '" selected>' + thisAccountName + ' (this account)</option>';
+        destSelect.disabled = true;
+        
+        sourceSelect.innerHTML = '<option value="">-- Select Source Account --</option>';
+        sourceSelect.disabled = false;
+        accounts.forEach(acc => {
+            if (acc.id !== thisAccountId) {
+                const label = acc.name + (acc.number ? ' (' + acc.number + ')' : '');
+                sourceSelect.innerHTML += '<option value="' + acc.id + '">' + label + '</option>';
+            }
+        });
+    } else {
+        // Negative: source = this account (fixed), destination = dropdown
+        sourceSelect.innerHTML = '<option value="' + thisAccountId + '" selected>' + thisAccountName + ' (this account)</option>';
+        sourceSelect.disabled = true;
+        
+        destSelect.innerHTML = '<option value="">-- Select Destination Account --</option>';
+        destSelect.disabled = false;
+        accounts.forEach(acc => {
+            if (acc.id !== thisAccountId) {
+                const label = acc.name + (acc.number ? ' (' + acc.number + ')' : '');
+                destSelect.innerHTML += '<option value="' + acc.id + '">' + label + '</option>';
+            }
+        });
     }
 }
 
@@ -840,27 +943,50 @@ function pushToAkaunting(transactionId, event) {
     
     const form = document.getElementById('push-form-' + transactionId);
     const formData = new FormData(form);
+    const transactionType = formData.get('type');
+    
     const data = {
         transaction_id: transactionId,
         date: formData.get('date'),
         reference: formData.get('reference'),
-        contact_id: parseInt(formData.get('contact_id')) || null,
-        contact: formData.get('contact'),
-        category_id: parseInt(formData.get('category_id')) || 1,
-        category_name: formData.get('category_name'),
         payment_method: formData.get('payment_method') || 'bank_transfer',
-        type: formData.get('type'),
+        type: transactionType,
         amount: parseFloat(formData.get('amount'))
     };
     
-    // Validate required fields
-    if (!data.contact_id) {
-        alert('Please select a vendor');
-        return false;
-    }
-    if (!data.category_id) {
-        alert('Please select a category');
-        return false;
+    if (transactionType === 'transfer') {
+        // For transfers, get source and destination account IDs
+        const sourceSelect = document.getElementById('source-select-' + transactionId);
+        const destSelect = document.getElementById('dest-select-' + transactionId);
+        
+        data.from_account_id = parseInt(sourceSelect.value) || null;
+        data.to_account_id = parseInt(destSelect.value) || null;
+        
+        // Validate transfer fields
+        if (!data.from_account_id) {
+            alert('Please select a source account');
+            return false;
+        }
+        if (!data.to_account_id) {
+            alert('Please select a destination account');
+            return false;
+        }
+    } else {
+        // For expense/income, get contact and category
+        data.contact_id = parseInt(formData.get('contact_id')) || null;
+        data.contact = formData.get('contact');
+        data.category_id = parseInt(formData.get('category_id')) || 1;
+        data.category_name = formData.get('category_name');
+        
+        // Validate required fields
+        if (!data.contact_id) {
+            alert('Please select a vendor');
+            return false;
+        }
+        if (!data.category_id) {
+            alert('Please select a category');
+            return false;
+        }
     }
     
     // Disable the submit button

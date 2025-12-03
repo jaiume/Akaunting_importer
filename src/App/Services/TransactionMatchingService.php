@@ -1028,5 +1028,121 @@ class TransactionMatchingService
             'message' => 'Transaction created in Akaunting'
         ];
     }
+
+    /**
+     * Push a transfer to Akaunting
+     */
+    public function pushTransferToAkaunting(
+        int $batchId,
+        int $transactionId,
+        string $date,
+        string $reference,
+        float $amount,
+        int $fromAccountId,
+        int $toAccountId,
+        string $paymentMethod
+    ): array {
+        // Get batch and installation info
+        $batch = $this->batchDAO->findById($batchId);
+        if (!$batch) {
+            throw new \Exception('Batch not found');
+        }
+
+        $account = $this->accountDAO->findById($batch['account_id']);
+        if (!$account) {
+            throw new \Exception('Account not found');
+        }
+
+        $installation = $this->installationDAO->findByEntityId($account['entity_id']);
+        if (!$installation) {
+            throw new \Exception('No Akaunting installation found');
+        }
+
+        // Get transaction to verify it exists and get description
+        $txn = $this->transactionDAO->findById($transactionId);
+        if (!$txn || $txn['batch_id'] !== $batchId) {
+            throw new \Exception('Transaction not found');
+        }
+
+        // Prepare API request
+        $password = $this->installationService->decryptPassword($installation['api_password']);
+        $companyId = $installation['company_id'] ?? 1;
+        $timeout = (int)ConfigService::get('akaunting.api_timeout', 60);
+
+        $headers = [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            'User-Agent: AkauntingImporter/1.0',
+            'X-Company: ' . $companyId,
+        ];
+
+        // Build transfer data for Akaunting API
+        $transferData = [
+            'from_account_id' => $fromAccountId,
+            'to_account_id' => $toAccountId,
+            'amount' => abs($amount), // Transfers are always positive
+            'transferred_at' => $date,
+            'payment_method' => $paymentMethod,
+            'description' => $txn['description'] ?? '',
+            'reference' => $reference,
+        ];
+
+        $url = rtrim($installation['base_url'], '/') . '/api/transfers';
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($transferData),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_USERPWD => $installation['api_email'] . ':' . $password,
+            CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) {
+            throw new \Exception("API request failed: $error");
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode < 200 || $httpCode >= 300) {
+            $errorMsg = $responseData['message'] ?? "HTTP $httpCode";
+            if (isset($responseData['errors'])) {
+                $errorMsg .= ': ' . json_encode($responseData['errors']);
+            }
+            throw new \Exception("Akaunting API error: $errorMsg");
+        }
+
+        // Success - update the local transaction with the Akaunting transfer ID
+        $akauntingId = $responseData['data']['id'] ?? null;
+        if ($akauntingId) {
+            $this->transactionDAO->updateMatch(
+                $transactionId,
+                $akauntingId,
+                $date,
+                $amount,
+                'Transfer', // contact name
+                'Transfer', // category name
+                'high' // confidence - we just created it
+            );
+            
+            // Update status to processed
+            $this->transactionDAO->updateStatus($transactionId, 'processed');
+        }
+
+        return [
+            'success' => true,
+            'akaunting_id' => $akauntingId,
+            'message' => 'Transfer created in Akaunting'
+        ];
+    }
 }
 

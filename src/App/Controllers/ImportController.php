@@ -143,8 +143,10 @@ class ImportController extends BaseController
         // Get match statistics
         $matchStats = $this->transactionDAO->getMatchStats($batchId);
         
-        // Get account type for determining income/expense logic
+        // Get account info for determining income/expense logic and transfers
         $accountType = $matchingInfo['account']['account_type'] ?? 'bank';
+        $akauntingAccountId = $matchingInfo['account']['akaunting_account_id'] ?? null;
+        $akauntingAccountName = $matchingInfo['account']['akaunting_account_name'] ?? null;
 
         return $this->render($response, 'import/batch.html.twig', [
             'user' => $user,
@@ -154,6 +156,8 @@ class ImportController extends BaseController
             'match_reason' => $matchingInfo['reason'] ?? null,
             'match_stats' => $matchStats,
             'account_type' => $accountType,
+            'akaunting_account_id' => $akauntingAccountId,
+            'akaunting_account_name' => $akauntingAccountName,
             'success' => $queryParams['success'] ?? null,
             'error' => $queryParams['error'] ?? null,
         ]);
@@ -328,21 +332,36 @@ class ImportController extends BaseController
 
         try {
             $body = json_decode($request->getBody()->getContents(), true);
+            $type = $body['type'] ?? 'expense';
             
-            $result = $this->matchingService->pushToAkaunting(
-                $batchId,
-                (int)$body['transaction_id'],
-                $body['date'],
-                $body['reference'] ?? '',
-                $body['contact'] ?? '',
-                !empty($body['contact_id']) ? (int)$body['contact_id'] : null,
-                $body['type'],
-                (float)$body['amount'],
-                (int)($body['category_id'] ?? 1),
-                $body['category_name'] ?? null,
-                $body['payment_method'] ?? 'bank_transfer',
-                $this->vendorDAO
-            );
+            // Handle transfers differently
+            if ($type === 'transfer') {
+                $result = $this->matchingService->pushTransferToAkaunting(
+                    $batchId,
+                    (int)$body['transaction_id'],
+                    $body['date'],
+                    $body['reference'] ?? '',
+                    (float)$body['amount'],
+                    (int)$body['from_account_id'],
+                    (int)$body['to_account_id'],
+                    $body['payment_method'] ?? 'bank_transfer'
+                );
+            } else {
+                $result = $this->matchingService->pushToAkaunting(
+                    $batchId,
+                    (int)$body['transaction_id'],
+                    $body['date'],
+                    $body['reference'] ?? '',
+                    $body['contact'] ?? '',
+                    !empty($body['contact_id']) ? (int)$body['contact_id'] : null,
+                    $type,
+                    (float)$body['amount'],
+                    (int)($body['category_id'] ?? 1),
+                    $body['category_name'] ?? null,
+                    $body['payment_method'] ?? 'bank_transfer',
+                    $this->vendorDAO
+                );
+            }
             
             return $this->json($response, $result);
         } catch (\Exception $e) {
@@ -440,6 +459,18 @@ class ImportController extends BaseController
             $categories = $this->vendorDAO->getCategoriesByInstallation($installationId);
             $paymentMethods = $this->vendorDAO->getPaymentMethodsByInstallation($installationId);
 
+            // Fetch Akaunting accounts for transfers (not cached, always fresh)
+            $akauntingAccounts = [];
+            try {
+                $akauntingAccounts = $this->installationService->fetchAkauntingAccounts(
+                    $installationId,
+                    $user['user_id']
+                );
+            } catch (\Exception $e) {
+                // Don't fail the whole request if accounts fetch fails
+                error_log('Failed to fetch Akaunting accounts: ' . $e->getMessage());
+            }
+
             // Check for suggested mapping based on description (vendor + category + payment method)
             $suggested = null;
             if ($description) {
@@ -462,6 +493,7 @@ class ImportController extends BaseController
                 'customers' => $customers,
                 'categories' => $categories,
                 'payment_methods' => $paymentMethods,
+                'akaunting_accounts' => $akauntingAccounts,
                 'suggested' => $suggested,
                 'cached_at' => $this->vendorDAO->getLastCacheTime($installationId, 'vendor')
             ]);
