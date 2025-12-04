@@ -50,16 +50,19 @@ class BatchDAO
     /**
      * Find batches by user
      */
-    public function findByUser(int $userId, ?int $limit = null): array
+    public function findByUser(int $userId, ?int $limit = null, bool $includeArchived = false): array
     {
         $sql = "
             SELECT b.*, a.account_name, e.entity_name
             FROM import_batches b
             JOIN accounts a ON b.account_id = a.account_id
             JOIN entities e ON a.entity_id = e.entity_id
-            WHERE b.user_id = :user_id 
-            ORDER BY b.created_at DESC
+            WHERE b.user_id = :user_id
         ";
+        if (!$includeArchived) {
+            $sql .= " AND b.is_archived = 0";
+        }
+        $sql .= " ORDER BY b.created_at DESC";
         if ($limit) {
             $sql .= " LIMIT " . (int)$limit;
         }
@@ -71,15 +74,18 @@ class BatchDAO
     /**
      * Find all batches (most recent first)
      */
-    public function findAll(?int $limit = null): array
+    public function findAll(?int $limit = null, bool $includeArchived = false): array
     {
         $sql = "
             SELECT b.*, a.account_name, e.entity_name
             FROM import_batches b
             JOIN accounts a ON b.account_id = a.account_id
             JOIN entities e ON a.entity_id = e.entity_id
-            ORDER BY b.created_at DESC
         ";
+        if (!$includeArchived) {
+            $sql .= " WHERE b.is_archived = 0";
+        }
+        $sql .= " ORDER BY b.created_at DESC";
         if ($limit) {
             $sql .= " LIMIT " . (int)$limit;
         }
@@ -155,5 +161,40 @@ class BatchDAO
         ");
         $stmt->execute(['batch_id' => $batchId, 'user_id' => $userId]);
         return (bool)$stmt->fetch();
+    }
+
+    /**
+     * Delete a batch
+     */
+    public function delete(int $batchId): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM import_batches WHERE batch_id = :batch_id");
+        return $stmt->execute(['batch_id' => $batchId]);
+    }
+
+    /**
+     * Archive a batch
+     */
+    public function archive(int $batchId): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE import_batches 
+            SET is_archived = 1, updated_at = NOW()
+            WHERE batch_id = :batch_id
+        ");
+        return $stmt->execute(['batch_id' => $batchId]);
+    }
+
+    /**
+     * Unarchive a batch
+     */
+    public function unarchive(int $batchId): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE import_batches 
+            SET is_archived = 0, updated_at = NOW()
+            WHERE batch_id = :batch_id
+        ");
+        return $stmt->execute(['batch_id' => $batchId]);
     }
 }

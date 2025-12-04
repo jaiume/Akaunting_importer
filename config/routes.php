@@ -90,7 +90,11 @@ return function (App $app) {
         $group->post('/import/batch/{batch_id}/match-reset', [ImportController::class, 'matchReset']);
         $group->post('/import/batch/{batch_id}/reimport', [ImportController::class, 'reimportBatch']);
         $group->post('/import/batch/{batch_id}/push-transaction', [ImportController::class, 'pushTransaction']);
+        $group->post('/import/batch/{batch_id}/replicate-transaction', [ImportController::class, 'replicateTransaction']);
         $group->get('/import/batch/{batch_id}/vendors', [ImportController::class, 'getVendors']);
+        $group->post('/import/batch/{batch_id}/delete', [ImportController::class, 'deleteBatch']);
+        $group->post('/import/batch/{batch_id}/archive', [ImportController::class, 'archiveBatch']);
+        $group->post('/import/batch/{batch_id}/unarchive', [ImportController::class, 'unarchiveBatch']);
         
     })->add($authMiddleware);
 
@@ -104,11 +108,18 @@ return function (App $app) {
         
         // Akaunting integration
         $group->get('/installations/{installation_id}/akaunting-accounts', [ApiController::class, 'getAkauntingAccounts']);
+        $group->get('/installations/{installation_id}/form-data', [ApiController::class, 'getInstallationFormData']);
+        
+        // Get entities with installations (for cross-entity replication)
+        $group->get('/entities-with-installations', [ApiController::class, 'getEntitiesWithInstallations']);
         
         // Account linking (links stored directly on accounts table)
         $group->get('/accounts/{account_id}/link', [ApiController::class, 'getAccountLinks']);
         $group->post('/accounts/{account_id}/link', [ApiController::class, 'saveAccountLink']);
         $group->delete('/accounts/{account_id}/link', [ApiController::class, 'deleteAccountLink']);
+        
+        // File analysis for smart import
+        $group->post('/analyze-file', [ApiController::class, 'analyzeFile']);
     })->add($authMiddleware);
 
     // ===================

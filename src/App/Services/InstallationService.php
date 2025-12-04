@@ -482,5 +482,120 @@ class InstallationService
             ];
         }
     }
+
+    /**
+     * Get entities with Akaunting installations (for cross-entity replication)
+     */
+    public function getEntitiesWithInstallations(int $userId, ?int $excludeEntityId = null): array
+    {
+        $installations = $this->installationDAO->findByUser($userId);
+        
+        $entities = [];
+        foreach ($installations as $installation) {
+            // Skip if entity_id is null or matches exclude
+            if (!$installation['entity_id']) {
+                continue;
+            }
+            if ($excludeEntityId && $installation['entity_id'] == $excludeEntityId) {
+                continue;
+            }
+            
+            $entities[] = [
+                'entity_id' => $installation['entity_id'],
+                'entity_name' => $installation['entity_name'],
+                'installation_id' => $installation['installation_id'],
+                'installation_name' => $installation['name'],
+            ];
+        }
+        
+        return $entities;
+    }
+
+    /**
+     * Get form data for a specific installation (vendors, categories, payment methods, accounts)
+     * Used for cross-entity replication
+     */
+    public function getFormDataForInstallation(
+        int $installationId, 
+        int $userId,
+        ?int $sourceInstallationId = null,
+        ?int $sourceVendorId = null,
+        ?int $sourceCategoryId = null
+    ): array {
+        $installation = $this->installationDAO->findByIdAndUser($installationId, $userId);
+        
+        if (!$installation) {
+            throw new \Exception('Installation not found');
+        }
+
+        // Fetch all data from Akaunting
+        $vendors = $this->fetchAkauntingContacts($installationId, $userId, 'vendor');
+        $customers = $this->fetchAkauntingContacts($installationId, $userId, 'customer');
+        $categories = $this->fetchAkauntingCategories($installationId, $userId);
+        $paymentMethods = $this->fetchAkauntingPaymentMethods($installationId, $userId);
+        $accounts = $this->fetchAkauntingAccounts($installationId, $userId);
+
+        // Look up suggested mapping if source info provided
+        $suggested = null;
+        if ($sourceInstallationId && ($sourceVendorId || $sourceCategoryId)) {
+            $suggested = $this->getCrossEntityMapping(
+                $sourceInstallationId,
+                $sourceVendorId,
+                $sourceCategoryId,
+                $installationId
+            );
+        }
+
+        return [
+            'vendors' => $vendors,
+            'customers' => $customers,
+            'categories' => $categories,
+            'payment_methods' => $paymentMethods,
+            'accounts' => $accounts,
+            'suggested' => $suggested,
+        ];
+    }
+
+    /**
+     * Get cross-entity mapping suggestion
+     */
+    public function getCrossEntityMapping(
+        int $sourceInstallationId,
+        ?int $sourceVendorId,
+        ?int $sourceCategoryId,
+        int $targetInstallationId
+    ): ?array {
+        return $this->installationDAO->findCrossEntityMapping(
+            $sourceInstallationId,
+            $sourceVendorId,
+            $sourceCategoryId,
+            $targetInstallationId
+        );
+    }
+
+    /**
+     * Save cross-entity mapping
+     */
+    public function saveCrossEntityMapping(
+        int $sourceInstallationId,
+        ?int $sourceVendorId,
+        ?int $sourceCategoryId,
+        int $targetInstallationId,
+        ?int $targetVendorId,
+        ?int $targetCategoryId,
+        ?int $targetAccountId,
+        ?string $targetPaymentMethod
+    ): void {
+        $this->installationDAO->saveCrossEntityMapping(
+            $sourceInstallationId,
+            $sourceVendorId,
+            $sourceCategoryId,
+            $targetInstallationId,
+            $targetVendorId,
+            $targetCategoryId,
+            $targetAccountId,
+            $targetPaymentMethod
+        );
+    }
 }
 

@@ -211,6 +211,48 @@ class TransactionDAO
         $stmt->execute(['batch_id' => $batchId]);
         return $stmt->rowCount();
     }
+
+    /**
+     * Update push status when transaction is pushed to Akaunting
+     */
+    public function updatePushStatus(int $transactionId, string $transactionNumber): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE import_transactions 
+            SET pushed_akaunting_transaction_number = :transaction_number,
+                pushed_at = CURRENT_TIMESTAMP
+            WHERE transaction_id = :transaction_id
+        ");
+        return $stmt->execute([
+            'transaction_id' => $transactionId,
+            'transaction_number' => $transactionNumber,
+        ]);
+    }
+
+    /**
+     * Update replication status when transaction is replicated to another entity
+     */
+    public function updateReplicationStatus(
+        int $transactionId,
+        int $akauntingId,
+        string $transactionNumber,
+        int $entityId
+    ): bool {
+        $stmt = $this->db->prepare("
+            UPDATE import_transactions 
+            SET replicated_akaunting_id = :akaunting_id,
+                replicated_akaunting_transaction_number = :transaction_number,
+                replicated_to_entity_id = :entity_id,
+                replicated_at = CURRENT_TIMESTAMP
+            WHERE transaction_id = :transaction_id
+        ");
+        return $stmt->execute([
+            'transaction_id' => $transactionId,
+            'akaunting_id' => $akauntingId,
+            'transaction_number' => $transactionNumber,
+            'entity_id' => $entityId,
+        ]);
+    }
 }
 
 

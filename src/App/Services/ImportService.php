@@ -4,23 +4,27 @@ namespace App\Services;
 
 use App\DAO\BatchDAO;
 use App\DAO\TransactionDAO;
+use App\DAO\MatchJobDAO;
 use App\Processors\ProcessorFactory;
 
 class ImportService
 {
     private BatchDAO $batchDAO;
     private TransactionDAO $transactionDAO;
+    private MatchJobDAO $matchJobDAO;
     private ProcessorFactory $processorFactory;
     private string $uploadDir;
 
     public function __construct(
         BatchDAO $batchDAO, 
         TransactionDAO $transactionDAO,
+        MatchJobDAO $matchJobDAO,
         ProcessorFactory $processorFactory,
         string $uploadDir
     ) {
         $this->batchDAO = $batchDAO;
         $this->transactionDAO = $transactionDAO;
+        $this->matchJobDAO = $matchJobDAO;
         $this->processorFactory = $processorFactory;
         $this->uploadDir = $uploadDir;
     }
@@ -155,6 +159,54 @@ class ImportService
         
         // Reset transaction count to 0
         $this->batchDAO->updateTransactionCount($batchId);
+    }
+
+    /**
+     * Get batches by user with optional archive filter
+     */
+    public function getBatchesByUser(int $userId, ?int $limit = null, bool $includeArchived = false): array
+    {
+        return $this->batchDAO->findByUser($userId, $limit, $includeArchived);
+    }
+
+    /**
+     * Delete a batch and its associated data
+     */
+    public function deleteBatch(int $batchId): bool
+    {
+        // Get batch info for file deletion
+        $batch = $this->batchDAO->findById($batchId);
+        if (!$batch) {
+            return false;
+        }
+
+        // Delete match jobs for this batch
+        $this->matchJobDAO->deleteByBatch($batchId);
+
+        // Delete the uploaded file
+        $filePath = $this->uploadDir . '/' . $batch['batch_import_filename'];
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+
+        // Delete the batch (cascades to transactions due to FK constraint)
+        return $this->batchDAO->delete($batchId);
+    }
+
+    /**
+     * Archive a batch
+     */
+    public function archiveBatch(int $batchId): bool
+    {
+        return $this->batchDAO->archive($batchId);
+    }
+
+    /**
+     * Unarchive a batch
+     */
+    public function unarchiveBatch(int $batchId): bool
+    {
+        return $this->batchDAO->unarchive($batchId);
     }
 }
 

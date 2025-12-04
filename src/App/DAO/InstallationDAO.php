@@ -157,5 +157,111 @@ class InstallationDAO
         $stmt->execute(['installation_id' => $installationId, 'user_id' => $userId]);
         return (bool)$stmt->fetch();
     }
+
+    /**
+     * Find cross-entity mapping suggestion
+     */
+    public function findCrossEntityMapping(
+        int $sourceInstallationId,
+        ?int $sourceVendorId,
+        ?int $sourceCategoryId,
+        int $targetInstallationId
+    ): ?array {
+        $sql = "
+            SELECT * FROM cross_entity_mappings 
+            WHERE source_installation_id = :source_installation_id 
+            AND target_installation_id = :target_installation_id
+        ";
+        $params = [
+            'source_installation_id' => $sourceInstallationId,
+            'target_installation_id' => $targetInstallationId,
+        ];
+
+        if ($sourceVendorId) {
+            $sql .= " AND source_vendor_id = :source_vendor_id";
+            $params['source_vendor_id'] = $sourceVendorId;
+        } else {
+            $sql .= " AND source_vendor_id IS NULL";
+        }
+
+        if ($sourceCategoryId) {
+            $sql .= " AND source_category_id = :source_category_id";
+            $params['source_category_id'] = $sourceCategoryId;
+        } else {
+            $sql .= " AND source_category_id IS NULL";
+        }
+
+        $sql .= " ORDER BY usage_count DESC, last_used_at DESC LIMIT 1";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $result = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $result ?: null;
+    }
+
+    /**
+     * Save or update cross-entity mapping
+     */
+    public function saveCrossEntityMapping(
+        int $sourceInstallationId,
+        ?int $sourceVendorId,
+        ?int $sourceCategoryId,
+        int $targetInstallationId,
+        ?int $targetVendorId,
+        ?int $targetCategoryId,
+        ?int $targetAccountId,
+        ?string $targetPaymentMethod
+    ): void {
+        // Try to find existing mapping
+        $existing = $this->findCrossEntityMapping(
+            $sourceInstallationId,
+            $sourceVendorId,
+            $sourceCategoryId,
+            $targetInstallationId
+        );
+
+        if ($existing) {
+            // Update existing mapping
+            $stmt = $this->db->prepare("
+                UPDATE cross_entity_mappings 
+                SET target_vendor_id = :target_vendor_id,
+                    target_category_id = :target_category_id,
+                    target_account_id = :target_account_id,
+                    target_payment_method = :target_payment_method,
+                    usage_count = usage_count + 1,
+                    last_used_at = CURRENT_TIMESTAMP
+                WHERE mapping_id = :mapping_id
+            ");
+            $stmt->execute([
+                'target_vendor_id' => $targetVendorId,
+                'target_category_id' => $targetCategoryId,
+                'target_account_id' => $targetAccountId,
+                'target_payment_method' => $targetPaymentMethod,
+                'mapping_id' => $existing['mapping_id'],
+            ]);
+        } else {
+            // Insert new mapping
+            $stmt = $this->db->prepare("
+                INSERT INTO cross_entity_mappings 
+                (source_installation_id, source_vendor_id, source_category_id, 
+                 target_installation_id, target_vendor_id, target_category_id, 
+                 target_account_id, target_payment_method, usage_count, last_used_at)
+                VALUES 
+                (:source_installation_id, :source_vendor_id, :source_category_id,
+                 :target_installation_id, :target_vendor_id, :target_category_id,
+                 :target_account_id, :target_payment_method, 1, CURRENT_TIMESTAMP)
+            ");
+            $stmt->execute([
+                'source_installation_id' => $sourceInstallationId,
+                'source_vendor_id' => $sourceVendorId,
+                'source_category_id' => $sourceCategoryId,
+                'target_installation_id' => $targetInstallationId,
+                'target_vendor_id' => $targetVendorId,
+                'target_category_id' => $targetCategoryId,
+                'target_account_id' => $targetAccountId,
+                'target_payment_method' => $targetPaymentMethod,
+            ]);
+        }
+    }
 }
 

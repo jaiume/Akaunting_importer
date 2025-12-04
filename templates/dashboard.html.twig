@@ -28,45 +28,45 @@
             <i class="bi bi-speedometer2"></i> Dashboard
         </h1>
         
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> {{ success }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
         <p class="lead">Welcome, {{ user.email }}!</p>
         
         <!-- Quick Actions -->
         <div class="row mt-4 quick-actions">
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card h-100">
+            <div class="col-md-6 col-lg-6 mb-3">
+                <div class="card h-100 border-primary">
                     <div class="card-body">
                         <h5 class="card-title">
-                            <i class="bi bi-credit-card text-primary"></i> Import RBL Credit Card
+                            <i class="bi bi-upload text-primary"></i> Import Statement
                         </h5>
-                        <p class="card-text">Import RBL Credit Card statements (CSV or PDF).</p>
-                        <a href="{{ base_url }}import?processor=rbl_credit_card" class="btn btn-primary">
-                            <i class="bi bi-upload"></i> Import
+                        <p class="card-text">Import bank or credit card statements. Supports RBL Bank and Credit Card (CSV or PDF). The system will auto-detect the statement type.</p>
+                        <a href="{{ base_url }}import" class="btn btn-primary btn-lg">
+                            <i class="bi bi-cloud-upload"></i> Import Statement
                         </a>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="bi bi-bank text-success"></i> Import RBL Bank
-                        </h5>
-                        <p class="card-text">Import RBL Bank statements (CSV or PDF).</p>
-                        <a href="{{ base_url }}import?processor=rbl_bank" class="btn btn-success">
-                            <i class="bi bi-upload"></i> Import
-                        </a>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 col-lg-4 mb-3">
+            <div class="col-md-6 col-lg-6 mb-3">
                 <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title">
                             <i class="bi bi-gear text-info"></i> Settings
                         </h5>
-                        <p class="card-text">Manage entities, accounts, and installations.</p>
+                        <p class="card-text">Manage entities, accounts, and Akaunting installations.</p>
                         <a href="{{ base_url }}settings" class="btn btn-info">
                             <i class="bi bi-gear"></i> Settings
                         </a>
@@ -79,6 +79,12 @@
         <div class="card mt-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-collection"></i> Import Batches</h5>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="showArchivedToggle" 
+                           {% if show_archived %}checked{% endif %}
+                           onchange="toggleShowArchived(this.checked)">
+                    <label class="form-check-label" for="showArchivedToggle">Show Archived</label>
+                </div>
             </div>
             <div class="card-body p-0">
                 {% if batches|length > 0 %}
@@ -97,11 +103,14 @@
                         </thead>
                         <tbody>
                             {% for batch in batches %}
-                            <tr>
+                            <tr{% if batch.is_archived %} class="table-secondary"{% endif %}>
                                 <td>
                                     <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="text-decoration-none fw-medium">
                                         {{ batch.batch_name }}
                                     </a>
+                                    {% if batch.is_archived %}
+                                    <span class="badge bg-secondary ms-1"><i class="bi bi-archive"></i> Archived</span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     <small class="text-muted">{{ batch.entity_name }}</small><br>
@@ -134,9 +143,42 @@
                                     <small class="text-muted">{{ batch.batch_import_datetime|date('g:i A') }}</small>
                                 </td>
                                 <td class="text-end">
-                                    <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-eye"></i> View
-                                    </a>
+                                    <div class="btn-group">
+                                        <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <span class="visually-hidden">Toggle Dropdown</span>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            {% if batch.is_archived %}
+                                            <li>
+                                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/unarchive" class="d-inline">
+                                                    <button type="submit" class="dropdown-item">
+                                                        <i class="bi bi-archive text-info"></i> Unarchive
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            {% else %}
+                                            <li>
+                                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/archive" class="d-inline">
+                                                    <button type="submit" class="dropdown-item">
+                                                        <i class="bi bi-archive text-warning"></i> Archive
+                                                    </button>
+                                                </form>
+                                            </li>
+                                            {% endif %}
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/delete" 
+                                                      onsubmit="return confirm('Are you sure you want to delete this batch? This will permanently delete all transactions and the uploaded file.');">
+                                                    <button type="submit" class="dropdown-item text-danger">
+                                                        <i class="bi bi-trash"></i> Delete
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -153,5 +195,17 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleShowArchived(showArchived) {
+    if (showArchived) {
+        window.location.href = '{{ base_url }}dashboard?show_archived=1';
+    } else {
+        window.location.href = '{{ base_url }}dashboard';
+    }
+}
+</script>
 {% endblock %}
 

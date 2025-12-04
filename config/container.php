@@ -158,6 +158,7 @@ $containerBuilder->addDefinitions([
         return new ImportService(
             $c->get(BatchDAO::class),
             $c->get(TransactionDAO::class),
+            $c->get(MatchJobDAO::class),
             $c->get(ProcessorFactory::class),
             $uploadDir
         );

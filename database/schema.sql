@@ -116,12 +116,14 @@ CREATE TABLE IF NOT EXISTS `import_batches` (
   `total_transactions` int(11) DEFAULT 0,
   `processed_transactions` int(11) DEFAULT 0,
   `error_message` text DEFAULT NULL,
+  `is_archived` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`batch_id`),
   KEY `account_id` (`account_id`),
   KEY `status` (`status`),
   KEY `user_id` (`user_id`),
+  KEY `is_archived` (`is_archived`),
   CONSTRAINT `import_batches_account_fk` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`account_id`) ON DELETE CASCADE,
   CONSTRAINT `import_batches_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -143,6 +145,12 @@ CREATE TABLE IF NOT EXISTS `import_transactions` (
   `matched_akaunting_amount` decimal(15,2) DEFAULT NULL COMMENT 'Matched transaction amount from Akaunting',
   `matched_akaunting_description` text DEFAULT NULL COMMENT 'Matched transaction description from Akaunting',
   `match_confidence` enum('high','medium','low') DEFAULT NULL COMMENT 'Confidence level of match',
+  `pushed_akaunting_transaction_number` varchar(50) DEFAULT NULL COMMENT 'Transaction number when pushed (e.g. IMP-TRA-443)',
+  `pushed_at` timestamp NULL DEFAULT NULL COMMENT 'When transaction was pushed to Akaunting',
+  `replicated_akaunting_id` int(11) DEFAULT NULL COMMENT 'Akaunting transaction ID in target entity',
+  `replicated_akaunting_transaction_number` varchar(50) DEFAULT NULL COMMENT 'Transaction number in target entity',
+  `replicated_to_entity_id` int(11) DEFAULT NULL COMMENT 'Target entity ID for replication',
+  `replicated_at` timestamp NULL DEFAULT NULL COMMENT 'When transaction was replicated',
   PRIMARY KEY (`transaction_id`),
   KEY `batch_id` (`batch_id`),
   KEY `transaction_date` (`transaction_date`),
@@ -271,4 +279,29 @@ CREATE TABLE IF NOT EXISTS `vendor_mappings` (
   KEY `description_pattern` (`description_pattern`),
   KEY `usage_count` (`usage_count`),
   CONSTRAINT `vendor_mappings_ibfk_1` FOREIGN KEY (`installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Cross-entity mappings table
+-- Maps vendor/category selections from one entity to another for cross-entity replication
+-- When a transaction is replicated to another entity, the mapping is saved for pre-selection
+CREATE TABLE IF NOT EXISTS `cross_entity_mappings` (
+  `mapping_id` int(11) NOT NULL AUTO_INCREMENT,
+  `source_installation_id` int(11) NOT NULL COMMENT 'Source Akaunting installation ID',
+  `source_vendor_id` int(11) DEFAULT NULL COMMENT 'Source vendor/contact ID',
+  `source_category_id` int(11) DEFAULT NULL COMMENT 'Source category ID',
+  `target_installation_id` int(11) NOT NULL COMMENT 'Target Akaunting installation ID',
+  `target_vendor_id` int(11) DEFAULT NULL COMMENT 'Target vendor/contact ID',
+  `target_category_id` int(11) DEFAULT NULL COMMENT 'Target category ID',
+  `target_account_id` int(11) DEFAULT NULL COMMENT 'Target Akaunting account ID',
+  `target_payment_method` varchar(100) DEFAULT NULL COMMENT 'Target payment method code',
+  `usage_count` int(11) DEFAULT 1 COMMENT 'How many times this mapping has been used',
+  `last_used_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`mapping_id`),
+  UNIQUE KEY `unique_mapping` (`source_installation_id`, `source_vendor_id`, `source_category_id`, `target_installation_id`),
+  KEY `source_installation_id` (`source_installation_id`),
+  KEY `target_installation_id` (`target_installation_id`),
+  KEY `usage_count` (`usage_count`),
+  CONSTRAINT `cross_entity_mappings_source_fk` FOREIGN KEY (`source_installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE,
+  CONSTRAINT `cross_entity_mappings_target_fk` FOREIGN KEY (`target_installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

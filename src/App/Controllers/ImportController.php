@@ -69,7 +69,7 @@ class ImportController extends BaseController
 
         // Validate processor
         if (!$processor || !in_array($processor, ['rbl_credit_card', 'rbl_bank'])) {
-            return $this->redirect($response, '/import?processor=' . urlencode($processor ?? '') . '&error=invalid_processor');
+            return $this->redirect($response, '/import?error=invalid_processor');
         }
 
         // Validate required fields
@@ -78,7 +78,7 @@ class ImportController extends BaseController
         $importDatetime = $data['batch_import_datetime'] ?? '';
 
         if (empty($batchName) || empty($accountId) || empty($importDatetime)) {
-            return $this->redirect($response, '/import?processor=' . urlencode($processor) . '&error=missing_fields');
+            return $this->redirect($response, '/import?error=missing_fields');
         }
 
         // Get uploaded file
@@ -86,7 +86,7 @@ class ImportController extends BaseController
         $uploadedFile = $uploadedFiles['import_file'] ?? null;
 
         if (!$uploadedFile) {
-            return $this->redirect($response, '/import?processor=' . urlencode($processor) . '&error=no_file');
+            return $this->redirect($response, '/import?error=no_file');
         }
 
         try {
@@ -116,7 +116,7 @@ class ImportController extends BaseController
             return $this->redirect($response, '/import/batch/' . $batchId . '?success=uploaded');
         } catch (\Exception $e) {
             error_log('Import error: ' . $e->getMessage());
-            return $this->redirect($response, '/import?processor=' . urlencode($processor) . '&error=server_error');
+            return $this->redirect($response, '/import?error=' . urlencode($e->getMessage()));
         }
     }
 
@@ -147,10 +147,15 @@ class ImportController extends BaseController
         $accountType = $matchingInfo['account']['account_type'] ?? 'bank';
         $akauntingAccountId = $matchingInfo['account']['akaunting_account_id'] ?? null;
         $akauntingAccountName = $matchingInfo['account']['akaunting_account_name'] ?? null;
+        $entityId = $matchingInfo['account']['entity_id'] ?? null;
+        $installationId = $matchingInfo['installation']['installation_id'] ?? null;
 
         return $this->render($response, 'import/batch.html.twig', [
             'user' => $user,
-            'batch' => $batch,
+            'batch' => array_merge($batch, [
+                'entity_id' => $entityId,
+                'installation_id' => $installationId,
+            ]),
             'transactions' => $transactions,
             'can_match' => $matchingInfo['can_match'],
             'match_reason' => $matchingInfo['reason'] ?? null,
@@ -370,6 +375,148 @@ class ImportController extends BaseController
                 'success' => false,
                 'message' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Replicate a transaction to another entity's Akaunting installation
+     */
+    public function replicateTransaction(Request $request, Response $response): Response
+    {
+        $user = $this->getUser($request);
+        $batchId = (int)$this->getRouteArg($request, 'batch_id');
+
+        if (!$this->importService->batchBelongsToUser($batchId, $user['user_id'])) {
+            return $this->json($response, [
+                'success' => false,
+                'message' => 'Batch not found'
+            ], 404);
+        }
+
+        try {
+            $body = json_decode($request->getBody()->getContents(), true);
+            
+            // Get the source transaction
+            $sourceTxn = $this->transactionDAO->findById((int)$body['source_transaction_id']);
+            if (!$sourceTxn || $sourceTxn['batch_id'] !== $batchId) {
+                throw new \Exception('Source transaction not found');
+            }
+
+            // Push to the other installation
+            $result = $this->matchingService->pushToOtherInstallation(
+                (int)$body['installation_id'],
+                (int)$body['account_id'],
+                $user['user_id'],
+                $body['date'],
+                $body['reference'] ?? '',
+                $body['contact_name'] ?? '',
+                !empty($body['contact_id']) ? (int)$body['contact_id'] : null,
+                $body['type'],
+                (float)$body['amount'],
+                (int)($body['category_id'] ?? 1),
+                $body['category_name'] ?? null,
+                $body['payment_method'] ?? 'bank_transfer',
+                $sourceTxn['description'] ?? ''
+            );
+
+            // If successful, save replication status and cross-entity mapping
+            if ($result['success']) {
+                // Save replication status on the source transaction
+                $this->transactionDAO->updateReplicationStatus(
+                    (int)$body['source_transaction_id'],
+                    $result['akaunting_id'] ?? 0,
+                    $result['transaction_number'] ?? '',
+                    (int)$body['entity_id']
+                );
+                
+                // Get the source installation ID for cross-entity mapping
+                $matchingInfo = $this->matchingService->canMatch($batchId, $user['user_id']);
+                if ($matchingInfo['can_match'] && isset($matchingInfo['installation'])) {
+                    $sourceInstallationId = $matchingInfo['installation']['installation_id'];
+                    
+                    $this->installationService->saveCrossEntityMapping(
+                        $sourceInstallationId,
+                        !empty($body['source_vendor_id']) ? (int)$body['source_vendor_id'] : null,
+                        !empty($body['source_category_id']) ? (int)$body['source_category_id'] : null,
+                        (int)$body['installation_id'],
+                        !empty($body['contact_id']) ? (int)$body['contact_id'] : null,
+                        !empty($body['category_id']) ? (int)$body['category_id'] : null,
+                        (int)$body['account_id'],
+                        $body['payment_method'] ?? null
+                    );
+                }
+            }
+            
+            return $this->json($response, $result);
+        } catch (\Exception $e) {
+            error_log('Replicate transaction error: ' . $e->getMessage());
+            return $this->json($response, [
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a batch
+     */
+    public function deleteBatch(Request $request, Response $response): Response
+    {
+        $user = $this->getUser($request);
+        $batchId = (int)$this->getRouteArg($request, 'batch_id');
+
+        if (!$this->importService->batchBelongsToUser($batchId, $user['user_id'])) {
+            return $this->redirect($response, '/dashboard?error=batch_not_found');
+        }
+
+        try {
+            $this->importService->deleteBatch($batchId);
+            return $this->redirect($response, '/dashboard?success=Batch+deleted+successfully');
+        } catch (\Exception $e) {
+            error_log('Delete batch error: ' . $e->getMessage());
+            return $this->redirect($response, '/dashboard?error=Failed+to+delete+batch');
+        }
+    }
+
+    /**
+     * Archive a batch
+     */
+    public function archiveBatch(Request $request, Response $response): Response
+    {
+        $user = $this->getUser($request);
+        $batchId = (int)$this->getRouteArg($request, 'batch_id');
+
+        if (!$this->importService->batchBelongsToUser($batchId, $user['user_id'])) {
+            return $this->redirect($response, '/dashboard?error=batch_not_found');
+        }
+
+        try {
+            $this->importService->archiveBatch($batchId);
+            return $this->redirect($response, '/dashboard?success=Batch+archived+successfully');
+        } catch (\Exception $e) {
+            error_log('Archive batch error: ' . $e->getMessage());
+            return $this->redirect($response, '/dashboard?error=Failed+to+archive+batch');
+        }
+    }
+
+    /**
+     * Unarchive a batch
+     */
+    public function unarchiveBatch(Request $request, Response $response): Response
+    {
+        $user = $this->getUser($request);
+        $batchId = (int)$this->getRouteArg($request, 'batch_id');
+
+        if (!$this->importService->batchBelongsToUser($batchId, $user['user_id'])) {
+            return $this->redirect($response, '/dashboard?error=batch_not_found');
+        }
+
+        try {
+            $this->importService->unarchiveBatch($batchId);
+            return $this->redirect($response, '/import/batch/' . $batchId . '?success=Batch+unarchived');
+        } catch (\Exception $e) {
+            error_log('Unarchive batch error: ' . $e->getMessage());
+            return $this->redirect($response, '/import/batch/' . $batchId . '?error=Failed+to+unarchive+batch');
         }
     }
 

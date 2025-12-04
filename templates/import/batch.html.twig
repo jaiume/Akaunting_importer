@@ -54,7 +54,18 @@
         font-weight: 500;
         color: #495057;
     }
-    .btn-outline-primary.p-0 {
+    .replicate-row td {
+        padding: 0 !important;
+        border-top: 1px dashed #e0a800;
+    }
+    .replicate-row .replicate-form {
+        border-radius: 0;
+    }
+    .replicate-row .form-label {
+        font-weight: 500;
+        color: #495057;
+    }
+    .btn-outline-primary.p-0, .btn-outline-secondary.p-0 {
         line-height: 1;
         font-size: 0.8rem;
     }
@@ -105,6 +116,9 @@
         
         <h1 class="mb-4">
             <i class="bi bi-file-earmark-text"></i> {{ batch.batch_name }}
+            {% if batch.is_archived %}
+            <span class="badge bg-secondary fs-6"><i class="bi bi-archive"></i> Archived</span>
+            {% endif %}
         </h1>
         
         {% if success %}
@@ -131,95 +145,110 @@
         </div>
         {% endif %}
         
-        <div class="row mb-4">
-            <div class="col-lg-8">
-                <div class="card batch-summary">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p class="mb-1"><strong>Entity:</strong> {{ batch.entity_name }}</p>
-                                <p class="mb-1"><strong>Account:</strong> {{ batch.account_name }}</p>
-                                <p class="mb-1"><strong>Import Type:</strong> {{ batch.batch_import_type }}</p>
-                                <p class="mb-0"><strong>Processor:</strong> {{ batch.import_processor }}</p>
-                            </div>
-                            <div class="col-md-6">
-                                <p class="mb-1"><strong>Status:</strong> 
-                                    {% if batch.status == 'pending' %}
-                                        <span class="badge bg-warning status-badge">Pending</span>
-                                    {% elseif batch.status == 'processing' %}
-                                        <span class="badge bg-info status-badge">Processing</span>
-                                    {% elseif batch.status == 'completed' %}
-                                        <span class="badge bg-success status-badge">Completed</span>
-                                    {% elseif batch.status == 'failed' %}
-                                        <span class="badge bg-danger status-badge">Failed</span>
-                                    {% endif %}
-                                </p>
-                                <p class="mb-1"><strong>Transactions:</strong> {{ batch.total_transactions }}</p>
-                                <p class="mb-1"><strong>Import Date:</strong> {{ batch.batch_import_datetime }}</p>
-                                <p class="mb-0"><strong>File:</strong> {{ batch.batch_import_filename }}</p>
-                            </div>
-                        </div>
+        <div class="card batch-summary mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <!-- Batch Info - Left Column -->
+                    <div class="col-md-4">
+                        <p class="mb-1"><strong>Entity:</strong> {{ batch.entity_name }}</p>
+                        <p class="mb-1"><strong>Account:</strong> {{ batch.account_name }}</p>
+                        <p class="mb-1"><strong>Import Type:</strong> {{ batch.batch_import_type }}</p>
+                        <p class="mb-0"><strong>Processor:</strong> {{ batch.import_processor }}</p>
                     </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Actions</h5>
-                        
-                        {% if batch.status == 'pending' %}
-                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/process" class="mb-2">
-                            <button type="submit" class="btn btn-primary w-100">
-                                <i class="bi bi-play-fill"></i> Process Batch
-                            </button>
-                        </form>
-                        {% elseif batch.status == 'failed' %}
-                        <div class="alert alert-danger mb-3">
-                            <strong><i class="bi bi-exclamation-triangle"></i> Processing Failed</strong>
-                            {% if batch.error_message %}
-                            <p class="mb-0 mt-2 small">{{ batch.error_message }}</p>
+                    <!-- Batch Info - Middle Column -->
+                    <div class="col-md-4">
+                        <p class="mb-1"><strong>Status:</strong> 
+                            {% if batch.status == 'pending' %}
+                                <span class="badge bg-warning status-badge">Pending</span>
+                            {% elseif batch.status == 'processing' %}
+                                <span class="badge bg-info status-badge">Processing</span>
+                            {% elseif batch.status == 'completed' %}
+                                <span class="badge bg-success status-badge">Completed</span>
+                            {% elseif batch.status == 'failed' %}
+                                <span class="badge bg-danger status-badge">Failed</span>
                             {% endif %}
-                        </div>
-                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/process" class="mb-2">
-                            <button type="submit" class="btn btn-warning w-100">
-                                <i class="bi bi-arrow-repeat"></i> Retry Processing
-                            </button>
-                        </form>
-                        {% elseif batch.status == 'completed' %}
-                            {% if can_match %}
-                            <button type="button" id="matchBtn" class="btn btn-info w-100 mb-2" onclick="startMatching()">
-                                <i class="bi bi-link-45deg"></i> Match with Akaunting
-                            </button>
-                            
-                            <!-- Progress display (hidden initially) -->
-                            <div id="matchProgress" class="mb-2" style="display: none;">
-                                <div class="progress mb-2" style="height: 20px;">
-                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
-                                </div>
-                                <small id="progressText" class="text-muted d-block text-center"></small>
-                            </div>
-                            
-                            {% if match_stats.matched > 0 %}
-                            <button type="button" id="clearBtn" class="btn btn-outline-warning w-100 mb-2" onclick="clearMatches()">
-                                <i class="bi bi-x-circle"></i> Clear Matches
-                            </button>
-                            {% endif %}
-                            {% else %}
-                            <div class="alert alert-secondary mb-2">
-                                <small><i class="bi bi-info-circle"></i> {{ match_reason }}</small>
-                            </div>
-                            {% endif %}
-                            
-                            <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/reimport" class="mb-2" onsubmit="return confirm('This will delete all existing transactions and re-import from the original file. Continue?');">
-                                <button type="submit" class="btn btn-outline-secondary w-100">
-                                    <i class="bi bi-arrow-clockwise"></i> Re-import File
+                        </p>
+                        <p class="mb-1"><strong>Transactions:</strong> {{ batch.total_transactions }}</p>
+                        <p class="mb-1"><strong>Import Date:</strong> {{ batch.batch_import_datetime }}</p>
+                        <p class="mb-0 text-truncate" title="{{ batch.batch_import_filename }}"><strong>File:</strong> {{ batch.batch_import_filename }}</p>
+                    </div>
+                    <!-- Actions - Right Column -->
+                    <div class="col-md-4 d-flex flex-column">
+                        <div class="batch-actions bg-white bg-opacity-10 rounded p-2 flex-grow-1">
+                            {% if batch.status == 'pending' %}
+                            <!-- Primary: Process -->
+                            <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/process" class="mb-2">
+                                <button type="submit" class="btn btn-light btn-sm w-100">
+                                    <i class="bi bi-play-fill"></i> Process Batch
                                 </button>
                             </form>
-                        {% endif %}
-                        
-                        <a href="{{ base_url }}dashboard" class="btn btn-outline-secondary w-100">
-                            <i class="bi bi-arrow-left"></i> Back to Dashboard
-                        </a>
+                            {% elseif batch.status == 'failed' %}
+                            <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/process" class="mb-2">
+                                <button type="submit" class="btn btn-warning btn-sm w-100">
+                                    <i class="bi bi-arrow-repeat"></i> Retry Processing
+                                </button>
+                            </form>
+                            {% elseif batch.status == 'completed' %}
+                                {% if can_match %}
+                                <button type="button" id="matchBtn" class="btn btn-light btn-sm w-100 mb-2" onclick="startMatching()">
+                                    <i class="bi bi-link-45deg"></i> Match with Akaunting
+                                </button>
+                                <!-- Progress display (hidden initially) -->
+                                <div id="matchProgress" class="mb-2" style="display: none;">
+                                    <div class="progress mb-1" style="height: 14px;">
+                                        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                                    </div>
+                                    <small id="progressText" class="text-white-50 d-block text-center small"></small>
+                                </div>
+                                {% if match_stats.matched > 0 %}
+                                <button type="button" id="clearBtn" class="btn btn-outline-light btn-sm w-100 mb-2" onclick="clearMatches()">
+                                    <i class="bi bi-x-circle"></i> Clear Matches
+                                </button>
+                                {% endif %}
+                                {% else %}
+                                <div class="text-white-50 small mb-2">
+                                    <i class="bi bi-info-circle"></i> {{ match_reason }}
+                                </div>
+                                {% endif %}
+                            {% endif %}
+                            
+                            <!-- Secondary Actions Row -->
+                            <div class="d-flex gap-1 mb-2">
+                                {% if batch.status == 'completed' %}
+                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/reimport" class="flex-fill" onsubmit="return confirm('This will delete all existing transactions and re-import from the original file. Continue?');">
+                                    <button type="submit" class="btn btn-outline-light btn-sm w-100 py-1">
+                                        <i class="bi bi-arrow-clockwise"></i> Re-import
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if batch.is_archived %}
+                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/unarchive" class="flex-fill">
+                                    <button type="submit" class="btn btn-outline-light btn-sm w-100 py-1">
+                                        <i class="bi bi-archive"></i> Unarchive
+                                    </button>
+                                </form>
+                                {% else %}
+                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/archive" class="flex-fill">
+                                    <button type="submit" class="btn btn-outline-light btn-sm w-100 py-1">
+                                        <i class="bi bi-archive"></i> Archive
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Footer: Dashboard & Delete -->
+                            <div class="d-flex justify-content-between align-items-center pt-1 border-top border-white border-opacity-25">
+                                <a href="{{ base_url }}dashboard" class="text-white-50 small text-decoration-none">
+                                    <i class="bi bi-arrow-left"></i> Dashboard
+                                </a>
+                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/delete" class="d-inline"
+                                      onsubmit="return confirm('Delete this batch permanently? All transactions and the uploaded file will be removed.');">
+                                    <button type="submit" class="btn btn-link btn-sm text-white-50 p-0 small">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -267,11 +296,13 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-list-ul"></i> Transactions ({{ transactions|length }})</h5>
                 <div class="d-flex align-items-center gap-3">
+                    <label class="small mb-0 me-1">Filter:</label>
+                    <select class="form-select form-select-sm" id="transactionFilter" onchange="applyTransactionFilter()" style="width: auto;">
+                        <option value="all">All transactions</option>
+                        <option value="hide-matched">Hide Matched</option>
+                        <option value="hide-matched-pushed">Hide Matched & Pushed</option>
+                    </select>
                     {% if match_stats.matched > 0 %}
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="showUnmatchedOnly" onchange="toggleUnmatchedFilter()">
-                        <label class="form-check-label small" for="showUnmatchedOnly">Show unmatched only</label>
-                    </div>
                     <span class="badge bg-info">{{ match_stats.matched }} matched</span>
                     {% endif %}
                 </div>
@@ -285,34 +316,46 @@
                                 <th style="width: 120px;">Reference</th>
                                 <th>Description</th>
                                 <th class="text-end" style="width: 130px;">Amount</th>
-                                <th style="width: 90px;">Status</th>
+                                <th style="width: 120px;">Status</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for txn in transactions %}
                             {% set row_class = loop.index is odd ? 'row-odd' : 'row-even' %}
-                            <tr class="{{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}">
+                            {% set is_pushed = txn.status == 'processed' %}
+                            <tr class="{{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}{% if is_pushed %} has-pushed{% endif %}">
                                 <td>{{ txn.transaction_date }}</td>
                                 <td>{{ txn.bank_ref ?: '-' }}</td>
                                 <td>{{ txn.description }}</td>
                                 <td class="text-end {% if txn.transaction_amount < 0 %}amount-debit{% else %}amount-credit{% endif %}">
                                     {{ txn.transaction_currency }} {{ txn.transaction_amount|number_format(2) }}
                                 </td>
-                                <td class="d-flex align-items-center gap-2">
-                                    {% if txn.status == 'pending' %}
-                                        <span class="badge bg-warning">Pending</span>
-                                    {% elseif txn.status == 'processed' %}
-                                        <span class="badge bg-success">Processed</span>
-                                    {% elseif txn.status == 'error' %}
-                                        <span class="badge bg-danger">Error</span>
-                                    {% endif %}
-                                    {% if not txn.matched_akaunting_id and can_match %}
-                                        <button type="button" class="btn btn-sm btn-outline-primary p-0 px-1" 
-                                                onclick="togglePushRow({{ txn.transaction_id }})" 
-                                                title="Push to Akaunting">
-                                            <i class="bi bi-cloud-upload"></i>
-                                        </button>
-                                    {% endif %}
+                                <td class="text-nowrap">
+                                    <div class="d-flex align-items-center gap-1">
+                                        {% if txn.status == 'pending' %}
+                                            <span class="badge bg-warning">Pending</span>
+                                        {% elseif txn.status == 'processed' %}
+                                            <span class="badge bg-success" title="Pushed: {{ txn.pushed_akaunting_transaction_number ?? 'N/A' }}">Pushed</span>
+                                            {% if txn.replicated_to_entity_id %}
+                                                <span class="badge bg-info" title="Replicated: {{ txn.replicated_akaunting_transaction_number ?? 'N/A' }}"><i class="bi bi-copy"></i></span>
+                                            {% else %}
+                                                <button type="button" class="btn btn-sm btn-outline-secondary p-0 px-1" 
+                                                        onclick="toggleReplicateRow({{ txn.transaction_id }})" 
+                                                        title="Replicate to another entity">
+                                                    <i class="bi bi-copy"></i>
+                                                </button>
+                                            {% endif %}
+                                        {% elseif txn.status == 'error' %}
+                                            <span class="badge bg-danger">Error</span>
+                                        {% endif %}
+                                        {% if not txn.matched_akaunting_id and can_match %}
+                                            <button type="button" class="btn btn-sm btn-outline-primary p-0 px-1" 
+                                                    onclick="togglePushRow({{ txn.transaction_id }})" 
+                                                    title="Push to Akaunting">
+                                                <i class="bi bi-cloud-upload"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {# Push to Akaunting row (hidden by default) #}
@@ -440,6 +483,98 @@
                                     </span>
                                 </td>
                             </tr>
+                            {# Replicate to another entity row (hidden by default) #}
+                            <tr class="replicate-row {{ row_class }}" id="replicate-row-{{ txn.transaction_id }}" style="display: none;">
+                                <td colspan="5">
+                                    <div class="replicate-form p-3 border-top" style="background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);">
+                                        <div class="small text-muted mb-2"><i class="bi bi-copy"></i> Replicate to another entity</div>
+                                        <form id="replicate-form-{{ txn.transaction_id }}" onsubmit="return replicateToEntity({{ txn.transaction_id }}, event)">
+                                            <input type="hidden" name="source_transaction_id" value="{{ txn.transaction_id }}">
+                                            {# Note: source vendor/category IDs not currently stored; mapping will use description-based matching #}
+                                            <input type="hidden" name="source_vendor_id" value="">
+                                            <input type="hidden" name="source_category_id" value="">
+                                            <div class="row g-2 align-items-end">
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Entity</label>
+                                                    <select class="form-select form-select-sm" name="entity_id" 
+                                                            id="replicate-entity-{{ txn.transaction_id }}"
+                                                            onchange="onReplicateEntityChange({{ txn.transaction_id }})"
+                                                            style="width: 150px;" required>
+                                                        <option value="">Select Entity...</option>
+                                                    </select>
+                                                    <input type="hidden" name="installation_id" id="replicate-installation-{{ txn.transaction_id }}">
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Account</label>
+                                                    <select class="form-select form-select-sm" name="account_id" 
+                                                            id="replicate-account-{{ txn.transaction_id }}"
+                                                            style="width: 150px;" required>
+                                                        <option value="">Select entity first</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Reference</label>
+                                                    <input type="text" class="form-control form-control-sm" name="reference" 
+                                                           value="{{ txn.bank_ref }}" style="width: 100px;">
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Type</label>
+                                                    {% set rep_is_expense = txn.transaction_amount < 0 %}
+                                                    <select class="form-select form-select-sm" name="type" 
+                                                            id="replicate-type-{{ txn.transaction_id }}"
+                                                            onchange="onReplicateTypeChange({{ txn.transaction_id }})"
+                                                            style="width: 95px;">
+                                                        <option value="expense" {% if rep_is_expense %}selected{% endif %}>Expense</option>
+                                                        <option value="income" {% if not rep_is_expense %}selected{% endif %}>Income</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col">
+                                                    <label class="form-label small mb-0" id="replicate-contact-label-{{ txn.transaction_id }}">{% if rep_is_expense %}Vendor{% else %}Customer{% endif %}</label>
+                                                    <select class="form-select form-select-sm" name="contact_id" 
+                                                            id="replicate-contact-{{ txn.transaction_id }}" required>
+                                                        <option value="">Select entity first</option>
+                                                    </select>
+                                                    <input type="hidden" name="contact_name" id="replicate-contact-name-{{ txn.transaction_id }}">
+                                                </div>
+                                                <div class="col">
+                                                    <label class="form-label small mb-0">Category</label>
+                                                    <select class="form-select form-select-sm" name="category_id" 
+                                                            id="replicate-category-{{ txn.transaction_id }}" required>
+                                                        <option value="">Select entity first</option>
+                                                    </select>
+                                                    <input type="hidden" name="category_name" id="replicate-category-name-{{ txn.transaction_id }}">
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Payment</label>
+                                                    <select class="form-select form-select-sm" name="payment_method" 
+                                                            id="replicate-payment-{{ txn.transaction_id }}"
+                                                            style="width: 130px;" required>
+                                                        <option value="">Select entity first</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Amount</label>
+                                                    <input type="number" step="0.01" class="form-control form-control-sm" name="amount" 
+                                                           value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 100px;" required>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <label class="form-label small mb-0">Date</label>
+                                                    <input type="date" class="form-control form-control-sm" name="date" 
+                                                           value="{{ txn.transaction_date }}" required>
+                                                </div>
+                                                <div class="col-auto">
+                                                    <button type="submit" class="btn btn-sm btn-warning">
+                                                        <i class="bi bi-copy"></i> Replicate
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleReplicateRow({{ txn.transaction_id }})">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
                             {% endif %}
                             {% endfor %}
                         </tbody>
@@ -471,22 +606,26 @@ const batchId = {{ batch.batch_id }};
 const baseUrl = '{{ base_url }}';
 let isMatching = false;
 
-// Check URL for unmatched filter state on page load
+// Check URL for filter state on page load
 document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('unmatched') === '1') {
-        const checkbox = document.getElementById('showUnmatchedOnly');
-        if (checkbox) {
-            checkbox.checked = true;
-            toggleUnmatchedFilter();
+    const filterValue = urlParams.get('filter');
+    if (filterValue) {
+        const filterSelect = document.getElementById('transactionFilter');
+        if (filterSelect) {
+            filterSelect.value = filterValue;
+            applyTransactionFilter();
         }
     }
 });
 
 // Helper to get current filter state for redirects
 function getFilterParams() {
-    const checkbox = document.getElementById('showUnmatchedOnly');
-    return (checkbox && checkbox.checked) ? '&unmatched=1' : '';
+    const filterSelect = document.getElementById('transactionFilter');
+    if (filterSelect && filterSelect.value !== 'all') {
+        return '&filter=' + filterSelect.value;
+    }
+    return '';
 }
 
 function startMatching() {
@@ -599,32 +738,53 @@ function clearMatches() {
     });
 }
 
-function toggleUnmatchedFilter() {
-    const checkbox = document.getElementById('showUnmatchedOnly');
+function applyTransactionFilter() {
+    const filterSelect = document.getElementById('transactionFilter');
+    const filterValue = filterSelect ? filterSelect.value : 'all';
     const rows = document.querySelectorAll('.transaction-table tbody tr');
     
     rows.forEach(row => {
-        if (checkbox.checked) {
-            // Show only unmatched - hide matched rows and their match-row siblings
-            if (row.classList.contains('has-match') || row.classList.contains('match-row')) {
-                row.style.display = 'none';
-            } else if (!row.classList.contains('push-row')) {
+        // Always hide push-row and replicate-row (they're toggled separately)
+        if (row.classList.contains('push-row') || row.classList.contains('replicate-row')) {
+            return;
+        }
+        
+        if (filterValue === 'all') {
+            // Show all except push-rows, replicate-rows, and match-rows (match-rows shown with their parent)
+            if (!row.classList.contains('match-row')) {
+                row.style.display = '';
+            } else {
+                // Show match row if parent has-match is visible
                 row.style.display = '';
             }
-        } else {
-            // Show all except push-rows (they're toggled separately)
-            if (!row.classList.contains('push-row')) {
+        } else if (filterValue === 'hide-matched') {
+            // Hide matched rows that are NOT pushed (only matched, not pushed)
+            // Pushed transactions should still show even if they have a match
+            if (row.classList.contains('match-row')) {
+                // Hide match-row if parent is hidden (matched but not pushed)
+                row.style.display = 'none';
+            } else if (row.classList.contains('has-match') && !row.classList.contains('has-pushed')) {
+                // Hide matched rows that are NOT pushed
+                row.style.display = 'none';
+            } else {
+                row.style.display = '';
+            }
+        } else if (filterValue === 'hide-matched-pushed') {
+            // Hide both matched AND pushed rows
+            if (row.classList.contains('has-match') || row.classList.contains('match-row') || row.classList.contains('has-pushed')) {
+                row.style.display = 'none';
+            } else {
                 row.style.display = '';
             }
         }
     });
     
     // Update the visible count in header
-    const visibleCount = document.querySelectorAll('.transaction-table tbody tr:not(.match-row):not(.push-row):not([style*="display: none"])').length;
+    const visibleCount = document.querySelectorAll('.transaction-table tbody tr:not(.match-row):not(.push-row):not(.replicate-row):not([style*="display: none"])').length;
     const headerTitle = document.querySelector('.card-header h5');
     if (headerTitle) {
         const totalCount = {{ transactions|length }};
-        if (checkbox.checked) {
+        if (filterValue !== 'all') {
             headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + visibleCount + ' of ' + totalCount + ')';
         } else {
             headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + totalCount + ')';
@@ -1010,6 +1170,348 @@ function pushToAkaunting(transactionId, event) {
             window.location.href = baseUrl + 'import/batch/' + batchId + '?success=' + encodeURIComponent('Transaction pushed to Akaunting') + getFilterParams();
         } else {
             alert('Error: ' + (result.message || 'Failed to push transaction'));
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalHtml;
+    });
+    
+    return false;
+}
+
+// =============================================
+// Cross-Entity Replication Functions
+// =============================================
+
+// Cache for entities with installations
+let entitiesCache = null;
+// Cache for installation form data (keyed by installation_id)
+let installationFormDataCache = {};
+// Current entity's installation ID (for source mapping info)
+const sourceInstallationId = {{ batch.installation_id ?? 'null' }};
+
+// Toggle replicate row visibility
+function toggleReplicateRow(transactionId) {
+    const row = document.getElementById('replicate-row-' + transactionId);
+    if (row) {
+        const isHidden = row.style.display === 'none';
+        row.style.display = isHidden ? '' : 'none';
+        
+        // Load entities list on first open
+        if (isHidden) {
+            loadEntitiesForReplicate(transactionId);
+        }
+    }
+}
+
+// Load entities with installations
+function loadEntitiesForReplicate(transactionId) {
+    const entitySelect = document.getElementById('replicate-entity-' + transactionId);
+    
+    // Use cache if available
+    if (entitiesCache) {
+        populateEntitySelect(transactionId, entitiesCache);
+        return;
+    }
+    
+    entitySelect.innerHTML = '<option value="">Loading...</option>';
+    
+    // Exclude current entity from list
+    const excludeEntity = {{ batch.entity_id ?? 'null' }};
+    let url = baseUrl + 'api/entities-with-installations';
+    if (excludeEntity) {
+        url += '?exclude_entity=' + excludeEntity;
+    }
+    
+    fetch(url, { credentials: 'same-origin' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                entitiesCache = data.entities || [];
+                populateEntitySelect(transactionId, entitiesCache);
+            } else {
+                entitySelect.innerHTML = '<option value="">Error loading</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading entities:', error);
+            entitySelect.innerHTML = '<option value="">Error loading</option>';
+        });
+}
+
+// Populate entity select dropdown
+function populateEntitySelect(transactionId, entities) {
+    const entitySelect = document.getElementById('replicate-entity-' + transactionId);
+    
+    entitySelect.innerHTML = '<option value="">-- Select Entity --</option>';
+    
+    entities.forEach(entity => {
+        const option = document.createElement('option');
+        option.value = entity.entity_id;
+        option.textContent = entity.entity_name;
+        option.dataset.installationId = entity.installation_id;
+        entitySelect.appendChild(option);
+    });
+}
+
+// Called when entity is selected in replicate form
+function onReplicateEntityChange(transactionId) {
+    const entitySelect = document.getElementById('replicate-entity-' + transactionId);
+    const installationInput = document.getElementById('replicate-installation-' + transactionId);
+    const accountSelect = document.getElementById('replicate-account-' + transactionId);
+    const contactSelect = document.getElementById('replicate-contact-' + transactionId);
+    const categorySelect = document.getElementById('replicate-category-' + transactionId);
+    const paymentSelect = document.getElementById('replicate-payment-' + transactionId);
+    
+    const selectedOption = entitySelect.options[entitySelect.selectedIndex];
+    const installationId = selectedOption.dataset.installationId;
+    
+    if (!installationId) {
+        accountSelect.innerHTML = '<option value="">Select entity first</option>';
+        contactSelect.innerHTML = '<option value="">Select entity first</option>';
+        categorySelect.innerHTML = '<option value="">Select entity first</option>';
+        paymentSelect.innerHTML = '<option value="">Select entity first</option>';
+        return;
+    }
+    
+    installationInput.value = installationId;
+    
+    // Show loading state
+    accountSelect.innerHTML = '<option value="">Loading...</option>';
+    contactSelect.innerHTML = '<option value="">Loading...</option>';
+    categorySelect.innerHTML = '<option value="">Loading...</option>';
+    paymentSelect.innerHTML = '<option value="">Loading...</option>';
+    
+    // Get source vendor/category for mapping lookup
+    const form = document.getElementById('replicate-form-' + transactionId);
+    const sourceVendorId = form.querySelector('[name="source_vendor_id"]').value;
+    const sourceCategoryId = form.querySelector('[name="source_category_id"]').value;
+    
+    // Check cache first
+    if (installationFormDataCache[installationId]) {
+        populateReplicateFormSelects(transactionId, installationFormDataCache[installationId]);
+        return;
+    }
+    
+    // Fetch form data for this installation
+    let url = baseUrl + 'api/installations/' + installationId + '/form-data';
+    if (sourceInstallationId) {
+        url += '?source_installation_id=' + sourceInstallationId;
+        if (sourceVendorId) url += '&source_vendor_id=' + sourceVendorId;
+        if (sourceCategoryId) url += '&source_category_id=' + sourceCategoryId;
+    }
+    
+    fetch(url, { credentials: 'same-origin' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                installationFormDataCache[installationId] = data;
+                populateReplicateFormSelects(transactionId, data);
+            } else {
+                accountSelect.innerHTML = '<option value="">Error loading</option>';
+                contactSelect.innerHTML = '<option value="">Error loading</option>';
+                categorySelect.innerHTML = '<option value="">Error loading</option>';
+                paymentSelect.innerHTML = '<option value="">Error loading</option>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading installation form data:', error);
+            accountSelect.innerHTML = '<option value="">Error loading</option>';
+            contactSelect.innerHTML = '<option value="">Error loading</option>';
+            categorySelect.innerHTML = '<option value="">Error loading</option>';
+            paymentSelect.innerHTML = '<option value="">Error loading</option>';
+        });
+}
+
+// Populate all dropdowns in replicate form
+function populateReplicateFormSelects(transactionId, data) {
+    const typeSelect = document.getElementById('replicate-type-' + transactionId);
+    const selectedType = typeSelect ? typeSelect.value : 'expense';
+    const suggested = data.suggested || {};
+    
+    // Populate accounts
+    const accountSelect = document.getElementById('replicate-account-' + transactionId);
+    accountSelect.innerHTML = '<option value="">-- Select Account --</option>';
+    (data.accounts || []).forEach(acc => {
+        const option = document.createElement('option');
+        option.value = acc.id;
+        option.textContent = acc.name + (acc.number ? ' (' + acc.number + ')' : '');
+        if (suggested.target_account_id && acc.id == suggested.target_account_id) {
+            option.selected = true;
+        }
+        accountSelect.appendChild(option);
+    });
+    
+    // Populate contacts (vendors or customers based on type)
+    populateReplicateContactSelect(transactionId, data, selectedType, suggested);
+    
+    // Populate categories
+    populateReplicateCategorySelect(transactionId, data, selectedType, suggested);
+    
+    // Populate payment methods
+    const paymentSelect = document.getElementById('replicate-payment-' + transactionId);
+    paymentSelect.innerHTML = '<option value="">-- Select --</option>';
+    const suggestedPayment = suggested.target_payment_method || 'bank_transfer';
+    (data.payment_methods || []).forEach(method => {
+        const option = document.createElement('option');
+        option.value = method.code;
+        option.textContent = method.name;
+        if (method.code === suggestedPayment) {
+            option.selected = true;
+        }
+        paymentSelect.appendChild(option);
+    });
+}
+
+// Populate contact select in replicate form
+function populateReplicateContactSelect(transactionId, data, type, suggested) {
+    const contactSelect = document.getElementById('replicate-contact-' + transactionId);
+    const hiddenInput = document.getElementById('replicate-contact-name-' + transactionId);
+    
+    const isExpense = type === 'expense';
+    const contacts = isExpense ? (data.vendors || []) : (data.customers || []);
+    const label = isExpense ? 'Vendor' : 'Customer';
+    
+    contactSelect.innerHTML = '<option value="">-- Select ' + label + ' --</option>';
+    
+    const suggestedId = suggested.target_vendor_id || null;
+    
+    contacts.forEach(contact => {
+        const option = document.createElement('option');
+        option.value = contact.id;
+        option.textContent = contact.name;
+        option.dataset.name = contact.name;
+        if (suggestedId && contact.id == suggestedId) {
+            option.selected = true;
+            hiddenInput.value = contact.name;
+        }
+        contactSelect.appendChild(option);
+    });
+    
+    contactSelect.onchange = function() {
+        const selectedOption = this.options[this.selectedIndex];
+        hiddenInput.value = selectedOption.dataset.name || '';
+    };
+}
+
+// Populate category select in replicate form
+function populateReplicateCategorySelect(transactionId, data, type, suggested) {
+    const categorySelect = document.getElementById('replicate-category-' + transactionId);
+    const hiddenInput = document.getElementById('replicate-category-name-' + transactionId);
+    
+    categorySelect.innerHTML = '<option value="">-- Select Category --</option>';
+    
+    const suggestedId = suggested.target_category_id || null;
+    
+    // Filter categories by type
+    const filteredCategories = (data.categories || []).filter(cat => {
+        return !cat.type || cat.type === type || cat.type === 'other';
+    });
+    
+    filteredCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category.id;
+        option.textContent = category.name;
+        option.dataset.name = category.name;
+        if (suggestedId && category.id == suggestedId) {
+            option.selected = true;
+            hiddenInput.value = category.name;
+        }
+        categorySelect.appendChild(option);
+    });
+    
+    categorySelect.onchange = function() {
+        const selectedOption = this.options[this.selectedIndex];
+        hiddenInput.value = selectedOption.dataset.name || '';
+    };
+}
+
+// Called when type changes in replicate form
+function onReplicateTypeChange(transactionId) {
+    const typeSelect = document.getElementById('replicate-type-' + transactionId);
+    const selectedType = typeSelect.value;
+    const installationInput = document.getElementById('replicate-installation-' + transactionId);
+    const installationId = installationInput.value;
+    
+    // Update contact label
+    const contactLabel = document.getElementById('replicate-contact-label-' + transactionId);
+    if (contactLabel) {
+        contactLabel.textContent = selectedType === 'expense' ? 'Vendor' : 'Customer';
+    }
+    
+    // Re-populate contacts and categories with cached data
+    if (installationId && installationFormDataCache[installationId]) {
+        const data = installationFormDataCache[installationId];
+        populateReplicateContactSelect(transactionId, data, selectedType, data.suggested || {});
+        populateReplicateCategorySelect(transactionId, data, selectedType, data.suggested || {});
+    }
+}
+
+// Submit replicate form
+function replicateToEntity(transactionId, event) {
+    event.preventDefault();
+    
+    const form = document.getElementById('replicate-form-' + transactionId);
+    const formData = new FormData(form);
+    
+    const data = {
+        source_transaction_id: parseInt(formData.get('source_transaction_id')),
+        source_vendor_id: parseInt(formData.get('source_vendor_id')) || null,
+        source_category_id: parseInt(formData.get('source_category_id')) || null,
+        installation_id: parseInt(formData.get('installation_id')),
+        account_id: parseInt(formData.get('account_id')),
+        date: formData.get('date'),
+        reference: formData.get('reference'),
+        type: formData.get('type'),
+        contact_id: parseInt(formData.get('contact_id')) || null,
+        contact_name: formData.get('contact_name'),
+        category_id: parseInt(formData.get('category_id')) || null,
+        category_name: formData.get('category_name'),
+        payment_method: formData.get('payment_method'),
+        amount: parseFloat(formData.get('amount'))
+    };
+    
+    // Validate required fields
+    if (!data.installation_id || !data.account_id) {
+        alert('Please select an entity and account');
+        return false;
+    }
+    if (!data.contact_id) {
+        alert('Please select a vendor/customer');
+        return false;
+    }
+    if (!data.category_id) {
+        alert('Please select a category');
+        return false;
+    }
+    
+    // Disable the submit button
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    
+    fetch(baseUrl + 'import/batch/' + batchId + '/replicate-transaction', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            alert('Transaction replicated successfully!');
+            toggleReplicateRow(transactionId);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalHtml;
+        } else {
+            alert('Error: ' + (result.message || 'Failed to replicate transaction'));
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalHtml;
         }

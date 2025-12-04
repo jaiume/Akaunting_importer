@@ -1003,6 +1003,9 @@ class TransactionMatchingService
             // Update status to processed
             $this->transactionDAO->updateStatus($transactionId, 'processed');
             
+            // Update push status with transaction number and timestamp
+            $this->transactionDAO->updatePushStatus($transactionId, $transactionNumber);
+            
             // Save transaction mapping for future auto-suggestion (vendor + category + payment method)
             if ($vendorDAO && !empty($txn['description'])) {
                 try {
@@ -1025,6 +1028,7 @@ class TransactionMatchingService
         return [
             'success' => true,
             'akaunting_id' => $akauntingId,
+            'transaction_number' => $transactionNumber,
             'message' => 'Transaction created in Akaunting'
         ];
     }
@@ -1123,6 +1127,8 @@ class TransactionMatchingService
 
         // Success - update the local transaction with the Akaunting transfer ID
         $akauntingId = $responseData['data']['id'] ?? null;
+        $transferNumber = 'IMP-TRF-' . $transactionId; // Transfer number format
+        
         if ($akauntingId) {
             $this->transactionDAO->updateMatch(
                 $transactionId,
@@ -1136,12 +1142,121 @@ class TransactionMatchingService
             
             // Update status to processed
             $this->transactionDAO->updateStatus($transactionId, 'processed');
+            
+            // Update push status with transfer number and timestamp
+            $this->transactionDAO->updatePushStatus($transactionId, $transferNumber);
         }
 
         return [
             'success' => true,
             'akaunting_id' => $akauntingId,
+            'transaction_number' => $transferNumber,
             'message' => 'Transfer created in Akaunting'
+        ];
+    }
+
+    /**
+     * Push a transaction to a different Akaunting installation (cross-entity replication)
+     */
+    public function pushToOtherInstallation(
+        int $installationId,
+        int $akauntingAccountId,
+        int $userId,
+        string $date,
+        string $reference,
+        string $contact,
+        ?int $contactId,
+        string $type,
+        float $amount,
+        int $categoryId,
+        ?string $categoryName,
+        string $paymentMethod,
+        string $description
+    ): array {
+        // Get the installation
+        $installation = $this->installationDAO->findByIdAndUser($installationId, $userId);
+        if (!$installation) {
+            throw new \Exception('Installation not found');
+        }
+
+        // Prepare API request
+        $password = $this->installationService->decryptPassword($installation['api_password']);
+        $companyId = $installation['company_id'] ?? 1;
+        $timeout = (int)ConfigService::get('akaunting.api_timeout', 60);
+
+        $headers = [
+            'Accept: application/json',
+            'Content-Type: application/json',
+            'User-Agent: AkauntingImporter/1.0',
+            'X-Company: ' . $companyId,
+        ];
+
+        // Build transaction data for Akaunting API
+        // Generate unique transaction number: IMP-REP-{timestamp}
+        $transactionNumber = 'IMP-REP-' . time() . '-' . rand(1000, 9999);
+        
+        $transactionData = [
+            'type' => $type,
+            'number' => $transactionNumber,
+            'account_id' => $akauntingAccountId,
+            'paid_at' => $date . ' 00:00:00',
+            'amount' => $amount,
+            'currency_code' => 'TTD', // Default currency, could be parameterized
+            'currency_rate' => 1.0,
+            'description' => $description,
+            'reference' => $reference,
+            'category_id' => $categoryId,
+            'payment_method' => $paymentMethod,
+        ];
+
+        // Add contact
+        if ($contactId) {
+            $transactionData['contact_id'] = $contactId;
+        } elseif (!empty($contact)) {
+            $transactionData['contact_name'] = $contact;
+        }
+
+        $url = rtrim($installation['base_url'], '/') . '/api/transactions';
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($transactionData),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_USERPWD => $installation['api_email'] . ':' . $password,
+            CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($error) {
+            throw new \Exception("API request failed: $error");
+        }
+
+        $responseData = json_decode($response, true);
+
+        if ($httpCode < 200 || $httpCode >= 300) {
+            $errorMsg = $responseData['message'] ?? "HTTP $httpCode";
+            if (isset($responseData['errors'])) {
+                $errorMsg .= ': ' . json_encode($responseData['errors']);
+            }
+            throw new \Exception("Akaunting API error: $errorMsg");
+        }
+
+        $akauntingId = $responseData['data']['id'] ?? null;
+
+        return [
+            'success' => true,
+            'akaunting_id' => $akauntingId,
+            'transaction_number' => $transactionNumber,
+            'message' => 'Transaction replicated to ' . $installation['name']
         ];
     }
 }
