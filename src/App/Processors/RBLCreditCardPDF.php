@@ -300,19 +300,20 @@ class RBLCreditCardPDF extends BaseProcessor
             return null; // Currency doesn't match account
         }
         
-        // Detect if it's a credit (payment/refund) - marked with CR suffix
-        $isCredit = preg_match('/[\d,]+\.\d{2}CR/i', $line);
-        
         // Pattern: Line contains date (MM/DD), description parts, and amount with currency
         // Amount format: TT$ 1,865.08CR or US$ 118.35CR or TT$ 450.00
         
-        // Extract the amount with currency prefix
-        if (!preg_match('/(TT\$|US\$)\s*([\d,]+\.\d{2})(CR)?/i', $line, $amountMatches)) {
+        // Extract the amount with currency prefix - use the LAST match on the line
+        // because descriptions may contain currency amounts (e.g., "Opt Issuer Fee - TT$53.99")
+        // but the actual transaction amount is always at the end of the line
+        if (!preg_match_all('/(TT\$|US\$)\s*([\d,]+\.\d{2})(CR)?/i', $line, $amountMatches, PREG_SET_ORDER)) {
             return null;
         }
         
-        $amount = str_replace(',', '', $amountMatches[2]);
-        $isCredit = !empty($amountMatches[3]); // CR suffix means credit
+        // Use the LAST match (rightmost amount is the actual transaction amount)
+        $lastMatch = end($amountMatches);
+        $amount = str_replace(',', '', $lastMatch[2]);
+        $isCredit = !empty($lastMatch[3]); // CR suffix means credit
         
         // Try to extract the Trans. Date (Finance Date) - the SECOND MM/DD pattern on the line
         // Line format: "PostingDate Reference TransDate Description Amount"
@@ -333,13 +334,17 @@ class RBLCreditCardPDF extends BaseProcessor
             $reference = $refMatches[1];
         }
         
-        // Extract description - everything between date/ref and the currency amount
-        // Remove the date, reference, and amount portions to get description
+        // Extract description - everything between date/ref and the final currency amount
+        // Remove the date, reference, and ONLY the last amount (actual transaction amount)
         $description = $line;
         $description = preg_replace('/^\d{2}\/\d{2}\s*/', '', $description); // Remove leading date
         $description = preg_replace('/\d{10,}\s*/', '', $description); // Remove reference numbers
         $description = preg_replace('/\d{2}\/\d{2}\s*/', '', $description); // Remove finance dates
-        $description = preg_replace('/(TT\$|US\$)\s*[\d,]+\.\d{2}(CR)?/i', '', $description); // Remove amount
+        
+        // Only remove the LAST currency amount (the actual transaction amount)
+        // This preserves amounts that are part of the description (e.g., "Opt Issuer Fee - TT$53.99")
+        $lastAmountPattern = '/(TT\$|US\$)\s*' . preg_quote($lastMatch[2], '/') . '(CR)?\s*$/i';
+        $description = preg_replace($lastAmountPattern, '', $description);
         $description = trim($description);
         
         // Clean up description

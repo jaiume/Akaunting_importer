@@ -147,6 +147,7 @@ class ImportController extends BaseController
         $accountType = $matchingInfo['account']['account_type'] ?? 'bank';
         $akauntingAccountId = $matchingInfo['account']['akaunting_account_id'] ?? null;
         $akauntingAccountName = $matchingInfo['account']['akaunting_account_name'] ?? null;
+        $akauntingAccountCurrency = $matchingInfo['account']['currency'] ?? 'TTD';
         $entityId = $matchingInfo['account']['entity_id'] ?? null;
         $installationId = $matchingInfo['installation']['installation_id'] ?? null;
 
@@ -163,6 +164,7 @@ class ImportController extends BaseController
             'account_type' => $accountType,
             'akaunting_account_id' => $akauntingAccountId,
             'akaunting_account_name' => $akauntingAccountName,
+            'akaunting_account_currency' => $akauntingAccountCurrency,
             'success' => $queryParams['success'] ?? null,
             'error' => $queryParams['error'] ?? null,
         ]);
@@ -349,7 +351,9 @@ class ImportController extends BaseController
                     (float)$body['amount'],
                     (int)$body['from_account_id'],
                     (int)$body['to_account_id'],
-                    $body['payment_method'] ?? 'bank_transfer'
+                    $body['payment_method'] ?? 'bank_transfer',
+                    isset($body['to_amount']) ? (float)$body['to_amount'] : null,
+                    isset($body['currency_rate']) ? (float)$body['currency_rate'] : null
                 );
             } else {
                 $result = $this->matchingService->pushToAkaunting(
@@ -408,7 +412,7 @@ class ImportController extends BaseController
                 (int)$body['account_id'],
                 $user['user_id'],
                 $body['date'],
-                $body['reference'] ?? '',
+                (int)$body['source_transaction_id'],
                 $body['contact_name'] ?? '',
                 !empty($body['contact_id']) ? (int)$body['contact_id'] : null,
                 $body['type'],
@@ -416,7 +420,9 @@ class ImportController extends BaseController
                 (int)($body['category_id'] ?? 1),
                 $body['category_name'] ?? null,
                 $body['payment_method'] ?? 'bank_transfer',
-                $sourceTxn['description'] ?? ''
+                $sourceTxn['description'] ?? '',
+                isset($body['to_amount']) ? (float)$body['to_amount'] : null,
+                isset($body['currency_rate']) ? (float)$body['currency_rate'] : null
             );
 
             // If successful, save replication status and cross-entity mapping

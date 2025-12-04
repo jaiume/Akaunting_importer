@@ -18,6 +18,19 @@
     .status-processing { color: #17a2b8; }
     .status-completed { color: #28a745; }
     .status-failed { color: #dc3545; }
+    
+    /* Entity/Account row headers */
+    .entity-header-row td {
+        border-bottom: 1px solid #dee2e6 !important;
+        background: linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%) !important;
+    }
+    .account-header-row td {
+        border-bottom: 1px solid #e9ecef !important;
+        font-size: 0.85rem;
+    }
+    .batch-row td {
+        border-bottom: 1px solid #f0f0f0;
+    }
 </style>
 {% endblock %}
 
@@ -75,7 +88,7 @@
             </div>
         </div>
         
-        <!-- Import Batches -->
+        <!-- Import Batches - Grouped by Entity / Account -->
         <div class="card mt-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-collection"></i> Import Batches</h5>
@@ -87,100 +100,130 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                {% if batches|length > 0 %}
+                {% if grouped_batches|length > 0 %}
                 <div class="table-responsive">
                     <table class="table table-hover batch-table mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Batch Name</th>
-                                <th>Entity / Account</th>
-                                <th>Type</th>
-                                <th class="text-center">Transactions</th>
-                                <th>Status</th>
-                                <th>Imported</th>
+                                <th style="width: 280px;">Batch Name</th>
+                                <th style="width: 160px;">Date Range</th>
+                                <th style="width: 50px;">Type</th>
+                                <th style="width: 60px;" class="text-center">Txns</th>
+                                <th style="width: 100px;">Status</th>
+                                <th style="width: 120px;">Imported</th>
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for batch in batches %}
-                            <tr{% if batch.is_archived %} class="table-secondary"{% endif %}>
-                                <td>
-                                    <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="text-decoration-none fw-medium">
-                                        {{ batch.batch_name }}
-                                    </a>
-                                    {% if batch.is_archived %}
-                                    <span class="badge bg-secondary ms-1"><i class="bi bi-archive"></i> Archived</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <small class="text-muted">{{ batch.entity_name }}</small><br>
-                                    {{ batch.account_name }}
-                                </td>
-                                <td>
-                                    {% if batch.batch_import_type == 'PDF' %}
-                                        <i class="bi bi-file-earmark-pdf text-danger"></i>
-                                    {% else %}
-                                        <i class="bi bi-filetype-csv text-success"></i>
-                                    {% endif %}
-                                    {{ batch.batch_import_type }}
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-secondary">{{ batch.total_transactions }}</span>
-                                </td>
-                                <td>
-                                    {% if batch.status == 'pending' %}
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pending</span>
-                                    {% elseif batch.status == 'processing' %}
-                                        <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Processing</span>
-                                    {% elseif batch.status == 'completed' %}
-                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
-                                    {% elseif batch.status == 'failed' %}
-                                        <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <small>{{ batch.batch_import_datetime|date('M j, Y') }}</small><br>
-                                    <small class="text-muted">{{ batch.batch_import_datetime|date('g:i A') }}</small>
-                                </td>
-                                <td class="text-end">
-                                    <div class="btn-group">
-                                        <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-eye"></i> View
-                                        </a>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
-                                            <span class="visually-hidden">Toggle Dropdown</span>
-                                        </button>
-                                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for entity_id, entity in grouped_batches %}
+                                {# Entity Header Row #}
+                                <tr class="entity-header-row">
+                                    <td colspan="7" class="py-2 bg-light">
+                                        <span class="fw-bold text-primary">
+                                            <i class="bi bi-building"></i> {{ entity.entity_name }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                
+                                {% for account_id, account in entity.accounts %}
+                                    {# Account Header Row #}
+                                    <tr class="account-header-row">
+                                        <td colspan="7" class="py-1" style="padding-left: 1.5rem !important; background-color: #fafbfc;">
+                                            <span class="text-secondary">
+                                                <i class="bi bi-wallet2"></i> {{ account.account_name }}
+                                            </span>
+                                            <span class="badge bg-secondary ms-1">{{ account.batches|length }}</span>
+                                        </td>
+                                    </tr>
+                                    
+                                    {# Batch Rows #}
+                                    {% for batch in account.batches %}
+                                    <tr class="batch-row{% if batch.is_archived %} table-secondary{% endif %}">
+                                        <td style="padding-left: 2.5rem !important;">
+                                            <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="text-decoration-none fw-medium">
+                                                {{ batch.batch_name }}
+                                            </a>
                                             {% if batch.is_archived %}
-                                            <li>
-                                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/unarchive" class="d-inline">
-                                                    <button type="submit" class="dropdown-item">
-                                                        <i class="bi bi-archive text-info"></i> Unarchive
-                                                    </button>
-                                                </form>
-                                            </li>
-                                            {% else %}
-                                            <li>
-                                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/archive" class="d-inline">
-                                                    <button type="submit" class="dropdown-item">
-                                                        <i class="bi bi-archive text-warning"></i> Archive
-                                                    </button>
-                                                </form>
-                                            </li>
+                                            <span class="badge bg-secondary ms-1"><i class="bi bi-archive"></i></span>
                                             {% endif %}
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li>
-                                                <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/delete" 
-                                                      onsubmit="return confirm('Are you sure you want to delete this batch? This will permanently delete all transactions and the uploaded file.');">
-                                                    <button type="submit" class="dropdown-item text-danger">
-                                                        <i class="bi bi-trash"></i> Delete
-                                                    </button>
-                                                </form>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </td>
-                            </tr>
+                                        </td>
+                                        <td>
+                                            {% if batch.min_date and batch.max_date %}
+                                                {% if batch.min_date == batch.max_date %}
+                                                    <small>{{ batch.min_date|date('M j, Y') }}</small>
+                                                {% else %}
+                                                    <small>{{ batch.min_date|date('M j') }} - {{ batch.max_date|date('M j, Y') }}</small>
+                                                {% endif %}
+                                            {% else %}
+                                                <small class="text-muted">-</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if batch.batch_import_type == 'PDF' %}
+                                                <i class="bi bi-file-earmark-pdf text-danger"></i>
+                                            {% else %}
+                                                <i class="bi bi-filetype-csv text-success"></i>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary">{{ batch.total_transactions }}</span>
+                                        </td>
+                                        <td>
+                                            {% if batch.status == 'pending' %}
+                                                <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> Pending</span>
+                                            {% elseif batch.status == 'processing' %}
+                                                <span class="badge bg-info"><i class="bi bi-arrow-repeat"></i> Processing</span>
+                                            {% elseif batch.status == 'completed' %}
+                                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
+                                            {% elseif batch.status == 'failed' %}
+                                                <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <small>{{ batch.batch_import_datetime|date('M j, Y') }}</small><br>
+                                            <small class="text-muted">{{ batch.batch_import_datetime|date('g:i A') }}</small>
+                                        </td>
+                                        <td class="text-end">
+                                            <div class="btn-group">
+                                                <a href="{{ base_url }}import/batch/{{ batch.batch_id }}" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-eye"></i> View
+                                                </a>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <span class="visually-hidden">Toggle Dropdown</span>
+                                                </button>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    {% if batch.is_archived %}
+                                                    <li>
+                                                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/unarchive" class="d-inline">
+                                                            <button type="submit" class="dropdown-item">
+                                                                <i class="bi bi-archive text-info"></i> Unarchive
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    {% else %}
+                                                    <li>
+                                                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/archive" class="d-inline">
+                                                            <button type="submit" class="dropdown-item">
+                                                                <i class="bi bi-archive text-warning"></i> Archive
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                    {% endif %}
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li>
+                                                        <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/delete" 
+                                                              onsubmit="return confirm('Are you sure you want to delete this batch? This will permanently delete all transactions and the uploaded file.');">
+                                                            <button type="submit" class="dropdown-item text-danger">
+                                                                <i class="bi bi-trash"></i> Delete
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endfor %}
                             {% endfor %}
                         </tbody>
                     </table>

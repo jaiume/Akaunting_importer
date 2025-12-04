@@ -21,11 +21,17 @@
         color: white;
         border-radius: 0.5rem;
     }
+    /* Default border for all rows */
     .transaction-table tbody tr {
-        border-bottom: 1px solid #dee2e6;
+        border-bottom: 1px solid #e9ecef;
     }
-    .transaction-table tbody tr.has-match {
-        border-bottom: 1px dashed #ccc;
+    /* Main transaction rows - darker border to separate transaction groups */
+    .transaction-table tbody tr.transaction-row {
+        border-bottom: 2px solid #adb5bd;
+    }
+    /* When transaction has visible sub-rows, lighter border between them */
+    .transaction-table tbody tr.transaction-row.has-match {
+        border-bottom: 1px solid #e9ecef;
     }
     .transaction-table tbody tr.row-odd td {
         background-color: rgba(0, 0, 0, 0.02);
@@ -33,6 +39,7 @@
     .transaction-table tbody tr.row-even td {
         background-color: #fff;
     }
+    /* Match row - part of transaction group, gets dark border at bottom */
     .match-row {
         font-size: 0.85rem;
     }
@@ -41,10 +48,13 @@
         padding-bottom: 0.25rem !important;
         color: #6c757d;
         font-style: italic;
+        border-bottom: 2px solid #adb5bd;
     }
+    /* Push row - light dashed divider within group */
     .push-row td {
         padding: 0 !important;
-        border-top: 1px dashed #ccc;
+        border-top: 1px dashed #dee2e6;
+        border-bottom: 2px solid #adb5bd;
     }
     .push-row .push-form {
         background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%);
@@ -54,9 +64,11 @@
         font-weight: 500;
         color: #495057;
     }
+    /* Replicate row - light dashed divider within group */
     .replicate-row td {
         padding: 0 !important;
-        border-top: 1px dashed #e0a800;
+        border-top: 1px dashed #f5c36d;
+        border-bottom: 2px solid #adb5bd;
     }
     .replicate-row .replicate-form {
         border-radius: 0;
@@ -323,7 +335,7 @@
                             {% for txn in transactions %}
                             {% set row_class = loop.index is odd ? 'row-odd' : 'row-even' %}
                             {% set is_pushed = txn.status == 'processed' %}
-                            <tr class="{{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}{% if is_pushed %} has-pushed{% endif %}">
+                            <tr class="transaction-row {{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}{% if is_pushed %} has-pushed{% endif %}">
                                 <td>{{ txn.transaction_date }}</td>
                                 <td>{{ txn.bank_ref ?: '-' }}</td>
                                 <td>{{ txn.description }}</td>
@@ -335,10 +347,14 @@
                                         {% if txn.status == 'pending' %}
                                             <span class="badge bg-warning">Pending</span>
                                         {% elseif txn.status == 'processed' %}
-                                            <span class="badge bg-success" title="Pushed: {{ txn.pushed_akaunting_transaction_number ?? 'N/A' }}">Pushed</span>
                                             {% if txn.replicated_to_entity_id %}
-                                                <span class="badge bg-info" title="Replicated: {{ txn.replicated_akaunting_transaction_number ?? 'N/A' }}"><i class="bi bi-copy"></i></span>
+                                                {# Both pushed and replicated - show combined badge #}
+                                                <span class="badge bg-success" title="Pushed: {{ txn.pushed_akaunting_transaction_number ?? 'N/A' }}&#10;Replicated: {{ txn.replicated_akaunting_transaction_number ?? 'N/A' }}">
+                                                    Pushed + Replicated
+                                                </span>
                                             {% else %}
+                                                {# Only pushed - show pushed badge and replicate button #}
+                                                <span class="badge bg-success" title="Pushed: {{ txn.pushed_akaunting_transaction_number ?? 'N/A' }}">Pushed</span>
                                                 <button type="button" class="btn btn-sm btn-outline-secondary p-0 px-1" 
                                                         onclick="toggleReplicateRow({{ txn.transaction_id }})" 
                                                         title="Replicate to another entity">
@@ -364,7 +380,7 @@
                                 <td colspan="5">
                                     <div class="push-form p-3 border-top">
                                         <form id="push-form-{{ txn.transaction_id }}" onsubmit="return pushToAkaunting({{ txn.transaction_id }}, event)">
-                                            <div class="row g-2 align-items-end">
+                                            <div class="row g-2 align-items-start">
                                                 <div class="col-auto">
                                                     <label class="form-label small mb-0">Date</label>
                                                     <input type="date" class="form-control form-control-sm" name="date" 
@@ -440,10 +456,38 @@
                                                         <option value="">Loading...</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-auto">
-                                                    <label class="form-label small mb-0">Amount</label>
-                                                    <input type="number" step="0.01" class="form-control form-control-sm" name="amount" 
-                                                           value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 100px;" required>
+                                                {# Currency exchange section - stacked vertically when currencies differ #}
+                                                <div class="col-auto" id="transfer-amounts-section-{{ txn.transaction_id }}">
+                                                    {# Single amount field (shown when currencies are same) #}
+                                                    <div id="single-amount-field-{{ txn.transaction_id }}">
+                                                        <label class="form-label small mb-0">Amount</label>
+                                                        <input type="number" step="0.01" class="form-control form-control-sm" name="amount" 
+                                                               id="amount-input-{{ txn.transaction_id }}"
+                                                               value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 100px;" required>
+                                                    </div>
+                                                    {# Stacked currency exchange fields (shown when currencies differ) #}
+                                                    <div class="transfer-fields currency-exchange-stack" id="currency-exchange-stack-{{ txn.transaction_id }}" style="display: none;">
+                                                        <div class="mb-1">
+                                                            <label class="form-label small mb-0" id="source-amount-label-{{ txn.transaction_id }}">Source Amount</label>
+                                                            <input type="number" step="0.01" class="form-control form-control-sm" 
+                                                                   id="source-amount-display-{{ txn.transaction_id }}"
+                                                                   value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 110px;" readonly>
+                                                        </div>
+                                                        <div class="mb-1">
+                                                            <label class="form-label small mb-0" id="dest-amount-label-{{ txn.transaction_id }}">Dest Amount</label>
+                                                            <input type="number" step="0.01" class="form-control form-control-sm" name="to_amount" 
+                                                                   id="dest-amount-{{ txn.transaction_id }}"
+                                                                   placeholder="0.00" style="width: 110px;"
+                                                                   oninput="calculateExchangeRate({{ txn.transaction_id }})">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label small mb-0">Rate</label>
+                                                            <input type="text" class="form-control form-control-sm" name="currency_rate_display"
+                                                                   id="exchange-rate-display-{{ txn.transaction_id }}"
+                                                                   style="width: 110px;" readonly placeholder="--">
+                                                            <input type="hidden" name="currency_rate" id="exchange-rate-{{ txn.transaction_id }}" value="">
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div class="col-auto">
                                                     <button type="submit" class="btn btn-sm btn-primary">
@@ -493,7 +537,8 @@
                                             {# Note: source vendor/category IDs not currently stored; mapping will use description-based matching #}
                                             <input type="hidden" name="source_vendor_id" value="">
                                             <input type="hidden" name="source_category_id" value="">
-                                            <div class="row g-2 align-items-end">
+                                            <input type="hidden" name="source_currency" value="{{ akaunting_account_currency ?? 'TTD' }}">
+                                            <div class="row g-2 align-items-start">
                                                 <div class="col-auto">
                                                     <label class="form-label small mb-0">Entity</label>
                                                     <select class="form-select form-select-sm" name="entity_id" 
@@ -552,10 +597,38 @@
                                                         <option value="">Select entity first</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-auto">
-                                                    <label class="form-label small mb-0">Amount</label>
-                                                    <input type="number" step="0.01" class="form-control form-control-sm" name="amount" 
-                                                           value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 100px;" required>
+                                                {# Currency exchange section for replication - stacked vertically when currencies differ #}
+                                                <div class="col-auto" id="replicate-amounts-section-{{ txn.transaction_id }}">
+                                                    {# Single amount field (shown when currencies are same) #}
+                                                    <div id="replicate-single-amount-field-{{ txn.transaction_id }}">
+                                                        <label class="form-label small mb-0">Amount</label>
+                                                        <input type="number" step="0.01" class="form-control form-control-sm" name="amount" 
+                                                               id="replicate-amount-input-{{ txn.transaction_id }}"
+                                                               value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 100px;" required>
+                                                    </div>
+                                                    {# Stacked currency exchange fields (shown when currencies differ) #}
+                                                    <div class="replicate-currency-fields replicate-currency-exchange-stack" id="replicate-currency-exchange-stack-{{ txn.transaction_id }}" style="display: none;">
+                                                        <div class="mb-1">
+                                                            <label class="form-label small mb-0" id="replicate-source-amount-label-{{ txn.transaction_id }}">Source Amount</label>
+                                                            <input type="number" step="0.01" class="form-control form-control-sm" 
+                                                                   id="replicate-source-amount-display-{{ txn.transaction_id }}"
+                                                                   value="{{ txn.transaction_amount|abs|number_format(2, '.', '') }}" style="width: 110px;" readonly>
+                                                        </div>
+                                                        <div class="mb-1">
+                                                            <label class="form-label small mb-0" id="replicate-dest-amount-label-{{ txn.transaction_id }}">Dest Amount</label>
+                                                            <input type="number" step="0.01" class="form-control form-control-sm" name="to_amount" 
+                                                                   id="replicate-dest-amount-{{ txn.transaction_id }}"
+                                                                   placeholder="0.00" style="width: 110px;"
+                                                                   oninput="calculateReplicateExchangeRate({{ txn.transaction_id }})">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label small mb-0">Rate</label>
+                                                            <input type="text" class="form-control form-control-sm" name="currency_rate_display"
+                                                                   id="replicate-exchange-rate-display-{{ txn.transaction_id }}"
+                                                                   style="width: 110px;" readonly placeholder="--">
+                                                            <input type="hidden" name="currency_rate" id="replicate-exchange-rate-{{ txn.transaction_id }}" value="">
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div class="col-auto">
                                                     <label class="form-label small mb-0">Date</label>
@@ -948,37 +1021,118 @@ function populateTransferFields(transactionId, data, amount) {
     // Current account info from template
     const thisAccountId = {{ akaunting_account_id ?? 'null' }};
     const thisAccountName = '{{ akaunting_account_name ?? "" }}';
+    const thisAccountCurrency = '{{ akaunting_account_currency ?? "TTD" }}';
     
     // Positive amount = money coming IN, so destination is this account, source is dropdown
     // Negative amount = money going OUT, so source is this account, destination is dropdown
     const isPositive = amount >= 0;
     
+    // Helper to build option with currency
+    function buildOption(acc, isThisAccount = false) {
+        const currency = acc.currency_code || 'TTD';
+        let label = acc.name;
+        if (acc.number) label += ' (' + acc.number + ')';
+        label += ' [' + currency + ']';
+        if (isThisAccount) label += ' (this account)';
+        return { label, currency };
+    }
+    
     if (isPositive) {
         // Positive: destination = this account (fixed), source = dropdown
-        destSelect.innerHTML = '<option value="' + thisAccountId + '" selected>' + thisAccountName + ' (this account)</option>';
+        const thisOpt = buildOption({ name: thisAccountName, currency_code: thisAccountCurrency }, true);
+        destSelect.innerHTML = '<option value="' + thisAccountId + '" data-currency="' + thisAccountCurrency + '" selected>' + thisOpt.label + '</option>';
         destSelect.disabled = true;
         
-        sourceSelect.innerHTML = '<option value="">-- Select Source Account --</option>';
+        sourceSelect.innerHTML = '<option value="" data-currency="">-- Select Source Account --</option>';
         sourceSelect.disabled = false;
         accounts.forEach(acc => {
             if (acc.id !== thisAccountId) {
-                const label = acc.name + (acc.number ? ' (' + acc.number + ')' : '');
-                sourceSelect.innerHTML += '<option value="' + acc.id + '">' + label + '</option>';
+                const opt = buildOption(acc);
+                sourceSelect.innerHTML += '<option value="' + acc.id + '" data-currency="' + opt.currency + '">' + opt.label + '</option>';
             }
         });
     } else {
         // Negative: source = this account (fixed), destination = dropdown
-        sourceSelect.innerHTML = '<option value="' + thisAccountId + '" selected>' + thisAccountName + ' (this account)</option>';
+        const thisOpt = buildOption({ name: thisAccountName, currency_code: thisAccountCurrency }, true);
+        sourceSelect.innerHTML = '<option value="' + thisAccountId + '" data-currency="' + thisAccountCurrency + '" selected>' + thisOpt.label + '</option>';
         sourceSelect.disabled = true;
         
-        destSelect.innerHTML = '<option value="">-- Select Destination Account --</option>';
+        destSelect.innerHTML = '<option value="" data-currency="">-- Select Destination Account --</option>';
         destSelect.disabled = false;
         accounts.forEach(acc => {
             if (acc.id !== thisAccountId) {
-                const label = acc.name + (acc.number ? ' (' + acc.number + ')' : '');
-                destSelect.innerHTML += '<option value="' + acc.id + '">' + label + '</option>';
+                const opt = buildOption(acc);
+                destSelect.innerHTML += '<option value="' + acc.id + '" data-currency="' + opt.currency + '">' + opt.label + '</option>';
             }
         });
+    }
+    
+    // Add change listener to check for currency mismatch
+    const activeSelect = isPositive ? sourceSelect : destSelect;
+    activeSelect.addEventListener('change', function() {
+        checkTransferCurrencyMismatch(transactionId, sourceSelect, destSelect);
+    });
+}
+
+// Check if source and destination currencies differ
+function checkTransferCurrencyMismatch(transactionId, sourceSelect, destSelect) {
+    const sourceOption = sourceSelect.options[sourceSelect.selectedIndex];
+    const destOption = destSelect.options[destSelect.selectedIndex];
+    
+    const sourceCurrency = sourceOption ? sourceOption.dataset.currency : '';
+    const destCurrency = destOption ? destOption.dataset.currency : '';
+    
+    const singleAmountField = document.getElementById('single-amount-field-' + transactionId);
+    const currencyExchangeStack = document.getElementById('currency-exchange-stack-' + transactionId);
+    const amountInput = document.getElementById('amount-input-' + transactionId);
+    const destAmountInput = document.getElementById('dest-amount-' + transactionId);
+    const exchangeRateInput = document.getElementById('exchange-rate-' + transactionId);
+    const exchangeRateDisplay = document.getElementById('exchange-rate-display-' + transactionId);
+    const sourceAmountLabel = document.getElementById('source-amount-label-' + transactionId);
+    const destAmountLabel = document.getElementById('dest-amount-label-' + transactionId);
+    
+    // Show currency exchange fields if currencies differ and both are selected
+    const currenciesDiffer = sourceCurrency && destCurrency && sourceCurrency !== destCurrency;
+    
+    if (currenciesDiffer) {
+        // Hide single amount, show stacked exchange fields
+        singleAmountField.style.display = 'none';
+        currencyExchangeStack.style.display = '';
+        destAmountInput.required = true;
+        
+        // Update labels to show currencies
+        if (sourceAmountLabel) sourceAmountLabel.textContent = 'Source (' + sourceCurrency + ')';
+        if (destAmountLabel) destAmountLabel.textContent = 'Dest (' + destCurrency + ')';
+    } else {
+        // Show single amount, hide stacked exchange fields
+        singleAmountField.style.display = '';
+        currencyExchangeStack.style.display = 'none';
+        destAmountInput.required = false;
+        destAmountInput.value = '';
+        exchangeRateInput.value = '';
+        exchangeRateDisplay.value = '';
+    }
+}
+
+// Calculate exchange rate based on source amount and destination amount
+function calculateExchangeRate(transactionId) {
+    // Get source amount from the display field (readonly, always has the original amount)
+    const sourceAmountDisplay = document.getElementById('source-amount-display-' + transactionId);
+    const destAmountInput = document.getElementById('dest-amount-' + transactionId);
+    const exchangeRateInput = document.getElementById('exchange-rate-' + transactionId);
+    const exchangeRateDisplay = document.getElementById('exchange-rate-display-' + transactionId);
+    
+    const sourceAmount = parseFloat(sourceAmountDisplay.value) || 0;
+    const destAmount = parseFloat(destAmountInput.value) || 0;
+    
+    if (sourceAmount > 0 && destAmount > 0) {
+        // Exchange rate = destination amount / source amount
+        const rate = destAmount / sourceAmount;
+        exchangeRateInput.value = rate.toFixed(6);
+        exchangeRateDisplay.value = rate.toFixed(4);
+    } else {
+        exchangeRateInput.value = '';
+        exchangeRateDisplay.value = '--';
     }
 }
 
@@ -1121,6 +1275,32 @@ function pushToAkaunting(transactionId, event) {
         
         data.from_account_id = parseInt(sourceSelect.value) || null;
         data.to_account_id = parseInt(destSelect.value) || null;
+        
+        // Check for currency exchange data
+        const destAmountInput = document.getElementById('dest-amount-' + transactionId);
+        const exchangeRateInput = document.getElementById('exchange-rate-' + transactionId);
+        
+        // Get currencies from selected options
+        const sourceOption = sourceSelect.options[sourceSelect.selectedIndex];
+        const destOption = destSelect.options[destSelect.selectedIndex];
+        const sourceCurrency = sourceOption ? sourceOption.dataset.currency : null;
+        const destCurrency = destOption ? destOption.dataset.currency : null;
+        
+        // If currencies differ, include exchange rate data
+        if (sourceCurrency && destCurrency && sourceCurrency !== destCurrency) {
+            const toAmount = parseFloat(destAmountInput.value) || 0;
+            const rate = parseFloat(exchangeRateInput.value) || 0;
+            
+            if (!toAmount || toAmount <= 0) {
+                alert('Please enter the destination amount in ' + destCurrency);
+                return false;
+            }
+            
+            data.to_amount = toAmount;
+            data.currency_rate = rate;
+            data.from_currency = sourceCurrency;
+            data.to_currency = destCurrency;
+        }
         
         // Validate transfer fields
         if (!data.from_account_id) {
@@ -1333,17 +1513,27 @@ function populateReplicateFormSelects(transactionId, data) {
     const selectedType = typeSelect ? typeSelect.value : 'expense';
     const suggested = data.suggested || {};
     
-    // Populate accounts
+    // Populate accounts with currency
     const accountSelect = document.getElementById('replicate-account-' + transactionId);
-    accountSelect.innerHTML = '<option value="">-- Select Account --</option>';
+    accountSelect.innerHTML = '<option value="" data-currency="">-- Select Account --</option>';
     (data.accounts || []).forEach(acc => {
         const option = document.createElement('option');
         option.value = acc.id;
-        option.textContent = acc.name + (acc.number ? ' (' + acc.number + ')' : '');
+        const currency = acc.currency_code || 'TTD';
+        let label = acc.name;
+        if (acc.number) label += ' (' + acc.number + ')';
+        label += ' [' + currency + ']';
+        option.textContent = label;
+        option.dataset.currency = currency;
         if (suggested.target_account_id && acc.id == suggested.target_account_id) {
             option.selected = true;
         }
         accountSelect.appendChild(option);
+    });
+    
+    // Add change listener to check for currency mismatch
+    accountSelect.addEventListener('change', function() {
+        checkReplicateCurrencyMismatch(transactionId);
     });
     
     // Populate contacts (vendors or customers based on type)
@@ -1430,6 +1620,68 @@ function populateReplicateCategorySelect(transactionId, data, type, suggested) {
     };
 }
 
+// Check if source and destination currencies differ for replication
+function checkReplicateCurrencyMismatch(transactionId) {
+    const form = document.getElementById('replicate-form-' + transactionId);
+    const sourceCurrency = form.querySelector('[name="source_currency"]').value;
+    
+    const accountSelect = document.getElementById('replicate-account-' + transactionId);
+    const selectedOption = accountSelect.options[accountSelect.selectedIndex];
+    const destCurrency = selectedOption ? selectedOption.dataset.currency : '';
+    
+    const singleAmountField = document.getElementById('replicate-single-amount-field-' + transactionId);
+    const currencyExchangeStack = document.getElementById('replicate-currency-exchange-stack-' + transactionId);
+    const destAmountInput = document.getElementById('replicate-dest-amount-' + transactionId);
+    const sourceAmountLabel = document.getElementById('replicate-source-amount-label-' + transactionId);
+    const destAmountLabel = document.getElementById('replicate-dest-amount-label-' + transactionId);
+    const exchangeRateInput = document.getElementById('replicate-exchange-rate-' + transactionId);
+    const exchangeRateDisplay = document.getElementById('replicate-exchange-rate-display-' + transactionId);
+    
+    // Show currency exchange fields if currencies differ and both are selected
+    const currenciesDiffer = sourceCurrency && destCurrency && sourceCurrency !== destCurrency;
+    
+    if (currenciesDiffer) {
+        // Hide single amount, show stacked exchange fields
+        singleAmountField.style.display = 'none';
+        currencyExchangeStack.style.display = '';
+        destAmountInput.required = true;
+        
+        // Update labels to show currencies
+        if (sourceAmountLabel) sourceAmountLabel.textContent = 'Source (' + sourceCurrency + ')';
+        if (destAmountLabel) destAmountLabel.textContent = 'Dest (' + destCurrency + ')';
+    } else {
+        // Show single amount, hide stacked exchange fields
+        singleAmountField.style.display = '';
+        currencyExchangeStack.style.display = 'none';
+        destAmountInput.required = false;
+        destAmountInput.value = '';
+        exchangeRateInput.value = '';
+        exchangeRateDisplay.value = '';
+    }
+}
+
+// Calculate exchange rate for replication based on source amount and destination amount
+function calculateReplicateExchangeRate(transactionId) {
+    // Get source amount from the display field (readonly, always has the original amount)
+    const sourceAmountDisplay = document.getElementById('replicate-source-amount-display-' + transactionId);
+    const destAmountInput = document.getElementById('replicate-dest-amount-' + transactionId);
+    const exchangeRateInput = document.getElementById('replicate-exchange-rate-' + transactionId);
+    const exchangeRateDisplay = document.getElementById('replicate-exchange-rate-display-' + transactionId);
+    
+    const sourceAmount = parseFloat(sourceAmountDisplay.value) || 0;
+    const destAmount = parseFloat(destAmountInput.value) || 0;
+    
+    if (sourceAmount > 0 && destAmount > 0) {
+        // Exchange rate = destination amount / source amount
+        const rate = destAmount / sourceAmount;
+        exchangeRateInput.value = rate.toFixed(6);
+        exchangeRateDisplay.value = rate.toFixed(4);
+    } else {
+        exchangeRateInput.value = '';
+        exchangeRateDisplay.value = '--';
+    }
+}
+
 // Called when type changes in replicate form
 function onReplicateTypeChange(transactionId) {
     const typeSelect = document.getElementById('replicate-type-' + transactionId);
@@ -1462,6 +1714,7 @@ function replicateToEntity(transactionId, event) {
         source_transaction_id: parseInt(formData.get('source_transaction_id')),
         source_vendor_id: parseInt(formData.get('source_vendor_id')) || null,
         source_category_id: parseInt(formData.get('source_category_id')) || null,
+        entity_id: parseInt(formData.get('entity_id')),
         installation_id: parseInt(formData.get('installation_id')),
         account_id: parseInt(formData.get('account_id')),
         date: formData.get('date'),
@@ -1474,6 +1727,28 @@ function replicateToEntity(transactionId, event) {
         payment_method: formData.get('payment_method'),
         amount: parseFloat(formData.get('amount'))
     };
+    
+    // Check for currency exchange data
+    const sourceCurrency = formData.get('source_currency');
+    const accountSelect = document.getElementById('replicate-account-' + transactionId);
+    const selectedOption = accountSelect.options[accountSelect.selectedIndex];
+    const destCurrency = selectedOption ? selectedOption.dataset.currency : null;
+    
+    // If currencies differ, include exchange rate data
+    if (sourceCurrency && destCurrency && sourceCurrency !== destCurrency) {
+        const toAmount = parseFloat(formData.get('to_amount')) || 0;
+        const rate = parseFloat(formData.get('currency_rate')) || 0;
+        
+        if (!toAmount || toAmount <= 0) {
+            alert('Please enter the destination amount in ' + destCurrency);
+            return false;
+        }
+        
+        data.to_amount = toAmount;
+        data.currency_rate = rate;
+        data.source_currency = sourceCurrency;
+        data.dest_currency = destCurrency;
+    }
     
     // Validate required fields
     if (!data.installation_id || !data.account_id) {
@@ -1506,10 +1781,10 @@ function replicateToEntity(transactionId, event) {
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            alert('Transaction replicated successfully!');
+            // Success - just close the row, no dialog needed
             toggleReplicateRow(transactionId);
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalHtml;
+            // Optionally reload to show updated status
+            window.location.reload();
         } else {
             alert('Error: ' + (result.message || 'Failed to replicate transaction'));
             submitBtn.disabled = false;

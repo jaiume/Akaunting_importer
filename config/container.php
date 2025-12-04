@@ -207,7 +207,9 @@ $containerBuilder->addDefinitions([
     DashboardController::class => function (ContainerInterface $c) {
         return new DashboardController(
             $c->get('view'),
-            $c->get(BatchDAO::class)
+            $c->get(BatchDAO::class),
+            $c->get(AuthenticationService::class),
+            $c->get(ConfigService::class)
         );
     },
     

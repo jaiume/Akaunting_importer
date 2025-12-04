@@ -1035,6 +1035,8 @@ class TransactionMatchingService
 
     /**
      * Push a transfer to Akaunting
+     * @param float|null $toAmount Amount in destination currency (for multi-currency transfers)
+     * @param float|null $currencyRate Exchange rate from source to destination currency
      */
     public function pushTransferToAkaunting(
         int $batchId,
@@ -1044,7 +1046,9 @@ class TransactionMatchingService
         float $amount,
         int $fromAccountId,
         int $toAccountId,
-        string $paymentMethod
+        string $paymentMethod,
+        ?float $toAmount = null,
+        ?float $currencyRate = null
     ): array {
         // Get batch and installation info
         $batch = $this->batchDAO->findById($batchId);
@@ -1084,12 +1088,18 @@ class TransactionMatchingService
         $transferData = [
             'from_account_id' => $fromAccountId,
             'to_account_id' => $toAccountId,
-            'amount' => abs($amount), // Transfers are always positive
+            'amount' => abs($amount), // Transfers are always positive (source amount)
             'transferred_at' => $date,
             'payment_method' => $paymentMethod,
             'description' => $txn['description'] ?? '',
             'reference' => $reference,
         ];
+        
+        // Add multi-currency fields if exchange rate is provided
+        if ($toAmount !== null && $currencyRate !== null && $currencyRate > 0) {
+            $transferData['to_amount'] = abs($toAmount);
+            $transferData['currency_rate'] = $currencyRate;
+        }
 
         $url = rtrim($installation['base_url'], '/') . '/api/transfers';
 
@@ -1158,12 +1168,17 @@ class TransactionMatchingService
     /**
      * Push a transaction to a different Akaunting installation (cross-entity replication)
      */
+    /**
+     * Push transaction to another installation (for cross-entity replication)
+     * @param float|null $toAmount Amount in destination currency (for multi-currency)
+     * @param float|null $currencyRate Exchange rate from source to destination currency
+     */
     public function pushToOtherInstallation(
         int $installationId,
         int $akauntingAccountId,
         int $userId,
         string $date,
-        string $reference,
+        int $sourceTransactionId,
         string $contact,
         ?int $contactId,
         string $type,
@@ -1171,7 +1186,9 @@ class TransactionMatchingService
         int $categoryId,
         ?string $categoryName,
         string $paymentMethod,
-        string $description
+        string $description,
+        ?float $toAmount = null,
+        ?float $currencyRate = null
     ): array {
         // Get the installation
         $installation = $this->installationDAO->findByIdAndUser($installationId, $userId);
@@ -1192,19 +1209,22 @@ class TransactionMatchingService
         ];
 
         // Build transaction data for Akaunting API
-        // Generate unique transaction number: IMP-REP-{timestamp}
-        $transactionNumber = 'IMP-REP-' . time() . '-' . rand(1000, 9999);
+        // Use same transaction number format as pushed transactions: IMP-TRA-{transaction_id}
+        $transactionNumber = 'IMP-TRA-' . $sourceTransactionId;
+        
+        // Use the destination amount if currency exchange is involved, otherwise use source amount
+        $finalAmount = ($toAmount !== null && $currencyRate !== null && $currencyRate > 0) ? $toAmount : $amount;
+        $finalRate = ($currencyRate !== null && $currencyRate > 0) ? $currencyRate : 1.0;
         
         $transactionData = [
             'type' => $type,
             'number' => $transactionNumber,
             'account_id' => $akauntingAccountId,
             'paid_at' => $date . ' 00:00:00',
-            'amount' => $amount,
+            'amount' => $finalAmount,
             'currency_code' => 'TTD', // Default currency, could be parameterized
-            'currency_rate' => 1.0,
+            'currency_rate' => $finalRate,
             'description' => $description,
-            'reference' => $reference,
             'category_id' => $categoryId,
             'payment_method' => $paymentMethod,
         ];

@@ -53,7 +53,9 @@ class BatchDAO
     public function findByUser(int $userId, ?int $limit = null, bool $includeArchived = false): array
     {
         $sql = "
-            SELECT b.*, a.account_name, e.entity_name
+            SELECT b.*, a.account_name, a.entity_id, e.entity_name,
+                   (SELECT MIN(t.transaction_date) FROM import_transactions t WHERE t.batch_id = b.batch_id) as min_date,
+                   (SELECT MAX(t.transaction_date) FROM import_transactions t WHERE t.batch_id = b.batch_id) as max_date
             FROM import_batches b
             JOIN accounts a ON b.account_id = a.account_id
             JOIN entities e ON a.entity_id = e.entity_id
@@ -62,7 +64,7 @@ class BatchDAO
         if (!$includeArchived) {
             $sql .= " AND b.is_archived = 0";
         }
-        $sql .= " ORDER BY b.created_at DESC";
+        $sql .= " ORDER BY e.entity_name, a.account_name, b.created_at DESC";
         if ($limit) {
             $sql .= " LIMIT " . (int)$limit;
         }

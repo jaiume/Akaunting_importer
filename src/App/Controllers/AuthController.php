@@ -25,12 +25,21 @@ class AuthController extends BaseController
 
     /**
      * Show login page
+     * If user is already logged in with valid token, redirect to dashboard
      */
     public function showLogin(Request $request, Response $response): Response
     {
-        $user = $this->getUser($request);
-        if ($user) {
-            return $this->redirect($response, '/dashboard');
+        // Check if user is already authenticated via cookie
+        $cookieName = $this->config::get('auth.cookie_name', 'auth_token');
+        $cookies = $request->getCookieParams();
+        $token = $cookies[$cookieName] ?? null;
+        
+        if ($token) {
+            $userData = $this->authService->verifyToken($token);
+            if ($userData) {
+                // User is already logged in, redirect to dashboard
+                return $this->redirect($response, '/dashboard');
+            }
         }
 
         $queryParams = $this->getQueryParams($request);
