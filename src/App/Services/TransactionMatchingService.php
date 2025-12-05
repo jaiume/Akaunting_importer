@@ -123,6 +123,7 @@ class TransactionMatchingService
                 $this->transactionDAO->updateMatch(
                     $txn['transaction_id'],
                     $match['akaunting_id'],
+                    $match['akaunting_number'] ?? null,
                     $match['akaunting_date'],
                     $match['akaunting_amount'],
                     $match['akaunting_contact'],
@@ -235,6 +236,7 @@ class TransactionMatchingService
                 
                 $allTransactions[] = [
                     'id' => $txn['id'],
+                    'number' => $txn['number'] ?? '',
                     'date' => $txnDate,
                     'amount' => (float)$txn['amount'],
                     'type' => $txn['type'], // 'income' or 'expense'
@@ -370,6 +372,7 @@ class TransactionMatchingService
                 $bestScore = $score;
                 $bestMatch = [
                     'akaunting_id' => $akTxn['id'],
+                    'akaunting_number' => $akTxn['number'] ?? '',
                     'akaunting_date' => $akTxn['date'],
                     'akaunting_amount' => $akTxn['amount'],
                     'akaunting_contact' => $akTxn['contact'] ?? '',
@@ -627,6 +630,7 @@ class TransactionMatchingService
                     $this->transactionDAO->updateMatch(
                         $txn['transaction_id'],
                         $match['akaunting_id'],
+                        $match['akaunting_number'] ?? null,
                         $match['akaunting_date'],
                         $match['akaunting_amount'],
                         $match['akaunting_contact'],
@@ -747,6 +751,7 @@ class TransactionMatchingService
                     
                 $bestMatch = [
                     'akaunting_id' => $akTxn['id'],
+                    'akaunting_number' => $akTxn['number'] ?? '',
                     'akaunting_date' => $akTxn['date'],
                     'akaunting_amount' => $displayAmount,
                     'akaunting_contact' => $akTxn['contact'] ?? '',
@@ -836,6 +841,7 @@ class TransactionMatchingService
 
             $transactions[] = [
                 'id' => $txn['id'],
+                'number' => $txn['number'] ?? '',
                 'date' => date('Y-m-d', strtotime($paidAt)),
                 'amount' => (float)$txn['amount'],
                 'type' => $txn['type'],
@@ -993,6 +999,7 @@ class TransactionMatchingService
             $this->transactionDAO->updateMatch(
                 $transactionId,
                 $akauntingId,
+                $transactionNumber, // Use the generated transaction number we pushed
                 $date,
                 $type === 'income' ? -$amount : $amount,
                 $contact,
@@ -1143,6 +1150,7 @@ class TransactionMatchingService
             $this->transactionDAO->updateMatch(
                 $transactionId,
                 $akauntingId,
+                $transferNumber, // Use the generated transfer number we pushed
                 $date,
                 $amount,
                 'Transfer', // contact name

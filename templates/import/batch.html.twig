@@ -506,7 +506,7 @@
                             {% if txn.matched_akaunting_id %}
                             <tr class="match-row {{ row_class }}">
                                 <td>{{ txn.matched_akaunting_date }}</td>
-                                <td>IMP-TRA-{{ txn.transaction_id }}</td>
+                                <td>{{ txn.matched_akaunting_number ?: '-' }}</td>
                                 <td>
                                     {% if txn.matched_akaunting_contact %}
                                         {{ txn.matched_akaunting_contact }}

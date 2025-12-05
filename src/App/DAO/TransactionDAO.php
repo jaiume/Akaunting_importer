@@ -132,6 +132,7 @@ class TransactionDAO
     public function updateMatch(
         int $transactionId,
         int $akauntingId,
+        ?string $akauntingNumber,
         string $akauntingDate,
         float $akauntingAmount,
         ?string $akauntingContact,
@@ -141,6 +142,7 @@ class TransactionDAO
         $stmt = $this->db->prepare("
             UPDATE import_transactions 
             SET matched_akaunting_id = :akaunting_id,
+                matched_akaunting_number = :akaunting_number,
                 matched_akaunting_date = :akaunting_date,
                 matched_akaunting_amount = :akaunting_amount,
                 matched_akaunting_contact = :akaunting_contact,
@@ -151,6 +153,7 @@ class TransactionDAO
         return $stmt->execute([
             'transaction_id' => $transactionId,
             'akaunting_id' => $akauntingId,
+            'akaunting_number' => $akauntingNumber,
             'akaunting_date' => $akauntingDate,
             'akaunting_amount' => $akauntingAmount,
             'akaunting_contact' => $akauntingContact,
@@ -167,6 +170,7 @@ class TransactionDAO
         $stmt = $this->db->prepare("
             UPDATE import_transactions 
             SET matched_akaunting_id = NULL,
+                matched_akaunting_number = NULL,
                 matched_akaunting_date = NULL,
                 matched_akaunting_amount = NULL,
                 matched_akaunting_contact = NULL,

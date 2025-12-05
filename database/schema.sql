@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS `import_transactions` (
   `status` enum('pending','processed','error') DEFAULT 'pending',
   `error_message` text DEFAULT NULL,
   `matched_akaunting_id` int(11) DEFAULT NULL COMMENT 'Matched Akaunting transaction ID',
+  `matched_akaunting_number` varchar(50) DEFAULT NULL COMMENT 'Matched Akaunting transaction number',
   `matched_akaunting_date` date DEFAULT NULL COMMENT 'Matched transaction date from Akaunting',
   `matched_akaunting_amount` decimal(15,2) DEFAULT NULL COMMENT 'Matched transaction amount from Akaunting',
   `matched_akaunting_description` text DEFAULT NULL COMMENT 'Matched transaction description from Akaunting',
