@@ -324,7 +324,12 @@ class TransactionMatchingService
             }
             
             // Check if type matches
-            if ($akTxn['type'] !== $expectedType) {
+            // Normalize transfer types: "expense-transfer" -> "expense", "income-transfer" -> "income"
+            $akType = $akTxn['type'];
+            if (str_ends_with($akType, '-transfer')) {
+                $akType = str_replace('-transfer', '', $akType);
+            }
+            if ($akType !== $expectedType) {
                 continue;
             }
             
@@ -693,7 +698,12 @@ class TransactionMatchingService
             }
             
             // Check type match
-            if ($akTxn['type'] !== $expectedType) {
+            // Normalize transfer types: "expense-transfer" -> "expense", "income-transfer" -> "income"
+            $akType = $akTxn['type'];
+            if (str_ends_with($akType, '-transfer')) {
+                $akType = str_replace('-transfer', '', $akType);
+            }
+            if ($akType !== $expectedType) {
                 continue;
             }
             
