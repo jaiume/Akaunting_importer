@@ -112,6 +112,13 @@
         font-size: 0.7rem;
         vertical-align: middle;
     }
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
 </style>
 {% endblock %}
 
@@ -248,11 +255,14 @@
                                 {% endif %}
                             </div>
                             
-                            <!-- Footer: Dashboard & Delete -->
+                            <!-- Footer: Dashboard, Refresh & Delete -->
                             <div class="d-flex justify-content-between align-items-center pt-1 border-top border-white border-opacity-25">
                                 <a href="{{ base_url }}dashboard" class="text-white-50 small text-decoration-none">
                                     <i class="bi bi-arrow-left"></i> Dashboard
                                 </a>
+                                <button type="button" id="refresh-cache-btn" class="btn btn-link btn-sm text-white-50 p-0 small" onclick="refreshVendorsCategories()">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                </button>
                                 <form method="POST" action="{{ base_url }}import/batch/{{ batch.batch_id }}/delete" class="d-inline"
                                       onsubmit="return confirm('Delete this batch permanently? All transactions and the uploaded file will be removed.');">
                                     <button type="submit" class="btn btn-link btn-sm text-white-50 p-0 small">
@@ -1798,6 +1808,37 @@ function replicateToEntity(transactionId, event) {
     });
     
     return false;
+}
+
+// Refresh vendors and categories cache
+function refreshVendorsCategories() {
+    const btn = document.getElementById('refresh-cache-btn');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Refreshing...';
+    
+    fetch('{{ base_url }}import/batch/{{ batch.batch_id }}/vendors?refresh=1')
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            if (data.success) {
+                btn.innerHTML = '<i class="bi bi-check"></i> Refreshed!';
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+            } else {
+                btn.innerHTML = '<i class="bi bi-x"></i> Failed';
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+                alert('Failed to refresh: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            alert('Error refreshing cache: ' + error.message);
+        });
 }
 </script>
 {% endblock %}
