@@ -11,6 +11,7 @@ use App\Services\TransactionMatchingService;
 use App\Services\InstallationService;
 use App\DAO\TransactionDAO;
 use App\DAO\VendorDAO;
+use App\DAO\OrphanTransactionDAO;
 
 class ImportController extends BaseController
 {
@@ -20,6 +21,7 @@ class ImportController extends BaseController
     private TransactionDAO $transactionDAO;
     private VendorDAO $vendorDAO;
     private InstallationService $installationService;
+    private OrphanTransactionDAO $orphanDAO;
 
     public function __construct(
         Twig $view,
@@ -28,7 +30,8 @@ class ImportController extends BaseController
         TransactionMatchingService $matchingService,
         TransactionDAO $transactionDAO,
         VendorDAO $vendorDAO,
-        InstallationService $installationService
+        InstallationService $installationService,
+        OrphanTransactionDAO $orphanDAO
     ) {
         parent::__construct($view);
         $this->importService = $importService;
@@ -37,6 +40,7 @@ class ImportController extends BaseController
         $this->transactionDAO = $transactionDAO;
         $this->vendorDAO = $vendorDAO;
         $this->installationService = $installationService;
+        $this->orphanDAO = $orphanDAO;
     }
 
     /**
@@ -143,6 +147,53 @@ class ImportController extends BaseController
         // Get match statistics
         $matchStats = $this->transactionDAO->getMatchStats($batchId);
         
+        // Get orphan transactions (Akaunting transactions with no match)
+        $orphans = $this->orphanDAO->findByBatchId($batchId);
+        
+        // Add orphan count to match stats
+        $matchStats['orphans'] = count($orphans);
+        
+        // Calculate batch date range from transactions
+        $batchDateRange = ['start' => null, 'end' => null];
+        if (!empty($transactions)) {
+            $dates = array_column($transactions, 'transaction_date');
+            $batchDateRange['start'] = min($dates);
+            $batchDateRange['end'] = max($dates);
+        }
+        
+        // Merge transactions and orphans into a single list, sorted by date
+        $combinedTransactions = [];
+        
+        // Add regular transactions with type marker
+        foreach ($transactions as $txn) {
+            $txn['_type'] = 'imported';
+            $txn['_sort_date'] = $txn['transaction_date'];
+            $combinedTransactions[] = $txn;
+        }
+        
+        // Add orphans with type marker
+        foreach ($orphans as $orphan) {
+            $orphan['_type'] = 'orphan';
+            $orphan['_sort_date'] = $orphan['transaction_date'];
+            $combinedTransactions[] = $orphan;
+        }
+        
+        // Sort by date, then by ID (orphans use orphan_id, transactions use transaction_id)
+        usort($combinedTransactions, function($a, $b) {
+            $dateCompare = strcmp($a['_sort_date'], $b['_sort_date']);
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+            // Same date - put imported transactions first, then orphans
+            if ($a['_type'] !== $b['_type']) {
+                return $a['_type'] === 'imported' ? -1 : 1;
+            }
+            // Same type - sort by ID
+            $aId = $a['_type'] === 'imported' ? ($a['transaction_id'] ?? 0) : ($a['orphan_id'] ?? 0);
+            $bId = $b['_type'] === 'imported' ? ($b['transaction_id'] ?? 0) : ($b['orphan_id'] ?? 0);
+            return $aId - $bId;
+        });
+        
         // Get account info for determining income/expense logic and transfers
         $accountType = $matchingInfo['account']['account_type'] ?? 'bank';
         $akauntingAccountId = $matchingInfo['account']['akaunting_account_id'] ?? null;
@@ -158,6 +209,9 @@ class ImportController extends BaseController
                 'installation_id' => $installationId,
             ]),
             'transactions' => $transactions,
+            'orphans' => $orphans,
+            'combined_transactions' => $combinedTransactions,
+            'batch_date_range' => $batchDateRange,
             'can_match' => $matchingInfo['can_match'],
             'match_reason' => $matchingInfo['reason'] ?? null,
             'match_stats' => $matchStats,

@@ -7,6 +7,7 @@ use App\DAO\TransactionDAO;
 use App\DAO\AccountDAO;
 use App\DAO\InstallationDAO;
 use App\DAO\MatchJobDAO;
+use App\DAO\OrphanTransactionDAO;
 
 class TransactionMatchingService
 {
@@ -16,6 +17,7 @@ class TransactionMatchingService
     private InstallationDAO $installationDAO;
     private InstallationService $installationService;
     private MatchJobDAO $matchJobDAO;
+    private ?OrphanTransactionDAO $orphanDAO;
     private int $matchingWindowDays;
 
     public function __construct(
@@ -25,7 +27,8 @@ class TransactionMatchingService
         InstallationDAO $installationDAO,
         InstallationService $installationService,
         MatchJobDAO $matchJobDAO,
-        int $matchingWindowDays = 5
+        int $matchingWindowDays = 5,
+        ?OrphanTransactionDAO $orphanDAO = null
     ) {
         $this->batchDAO = $batchDAO;
         $this->transactionDAO = $transactionDAO;
@@ -34,6 +37,7 @@ class TransactionMatchingService
         $this->installationService = $installationService;
         $this->matchJobDAO = $matchJobDAO;
         $this->matchingWindowDays = $matchingWindowDays;
+        $this->orphanDAO = $orphanDAO;
     }
 
     /**
@@ -398,6 +402,12 @@ class TransactionMatchingService
     {
         // Also delete any match job
         $this->matchJobDAO->deleteByBatch($batchId);
+        
+        // Also delete any orphan transactions
+        if ($this->orphanDAO) {
+            $this->orphanDAO->deleteByBatchId($batchId);
+        }
+        
         return $this->transactionDAO->clearMatchesByBatch($batchId);
     }
 
@@ -657,11 +667,34 @@ class TransactionMatchingService
         // Mark job complete
         $this->matchJobDAO->markComplete($job['job_id'], $matchedCount, count($importedTransactions));
 
+        // Save orphan transactions (Akaunting transactions with no match)
+        // Only include orphans within the actual batch date range (not the expanded matching window)
+        $orphanCount = 0;
+        if ($this->orphanDAO && !empty($akauntingTransactions) && !empty($importedTransactions)) {
+            // Get the actual date range of imported transactions
+            $importedDates = array_column($importedTransactions, 'transaction_date');
+            $batchMinDate = min($importedDates);
+            $batchMaxDate = max($importedDates);
+            
+            // Filter orphans to only those within the actual batch date range
+            $orphansInRange = array_filter($akauntingTransactions, function($akTxn) use ($batchMinDate, $batchMaxDate) {
+                $akDate = $akTxn['date'] ?? null;
+                if (!$akDate) return false;
+                return $akDate >= $batchMinDate && $akDate <= $batchMaxDate;
+            });
+            
+            if (!empty($orphansInRange)) {
+                $orphanCount = $this->orphanDAO->saveOrphans($batchId, array_values($orphansInRange));
+            }
+        }
+
         return [
             'status' => 'complete',
             'matched' => $matchedCount,
             'total' => count($importedTransactions),
-            'message' => "Matched $matchedCount of " . count($importedTransactions) . " transactions"
+            'orphans' => $orphanCount,
+            'message' => "Matched $matchedCount of " . count($importedTransactions) . " transactions" . 
+                        ($orphanCount > 0 ? " ($orphanCount orphans found)" : "")
         ];
     }
     

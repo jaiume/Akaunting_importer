@@ -24,6 +24,7 @@ use App\DAO\TransactionDAO;
 use App\DAO\VendorDAO;
 use App\DAO\InstallationDAO;
 use App\DAO\MatchJobDAO;
+use App\DAO\OrphanTransactionDAO;
 
 // Controllers
 use App\Controllers\AuthController;
@@ -168,6 +169,10 @@ $containerBuilder->addDefinitions([
         return new MatchJobDAO($c->get(PDO::class));
     },
     
+    OrphanTransactionDAO::class => function (ContainerInterface $c) {
+        return new OrphanTransactionDAO($c->get(PDO::class));
+    },
+    
     TransactionMatchingService::class => function (ContainerInterface $c) {
         $matchingWindowDays = (int)ConfigService::get('akaunting.matching_window_days', 5);
         return new TransactionMatchingService(
@@ -177,7 +182,8 @@ $containerBuilder->addDefinitions([
             $c->get(InstallationDAO::class),
             $c->get(InstallationService::class),
             $c->get(MatchJobDAO::class),
-            $matchingWindowDays
+            $matchingWindowDays,
+            $c->get(OrphanTransactionDAO::class)
         );
     },
     
@@ -232,7 +238,8 @@ $containerBuilder->addDefinitions([
             $c->get(TransactionMatchingService::class),
             $c->get(TransactionDAO::class),
             $c->get(VendorDAO::class),
-            $c->get(InstallationService::class)
+            $c->get(InstallationService::class),
+            $c->get(OrphanTransactionDAO::class)
         );
     },
     

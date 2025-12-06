@@ -119,6 +119,21 @@
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
     }
+    /* Orphan transaction rows - distinct styling */
+    .orphan-row {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%) !important;
+    }
+    .orphan-row td {
+        border-left: 3px solid #ffc107;
+    }
+    .orphan-row:hover td {
+        background: linear-gradient(135deg, #ffe69c 0%, #ffd43b 100%) !important;
+    }
+    .orphan-badge {
+        background-color: #ffc107;
+        color: #212529;
+        font-size: 0.7rem;
+    }
 </style>
 {% endblock %}
 
@@ -188,7 +203,9 @@
                             {% endif %}
                         </p>
                         <p class="mb-1"><strong>Transactions:</strong> {{ batch.total_transactions }}</p>
-                        <p class="mb-1"><strong>Import Date:</strong> {{ batch.batch_import_datetime }}</p>
+                        {% if batch_date_range.start and batch_date_range.end %}
+                        <p class="mb-1"><strong>Date Range:</strong> {{ batch_date_range.start }} to {{ batch_date_range.end }}</p>
+                        {% endif %}
                         <p class="mb-0 text-truncate" title="{{ batch.batch_import_filename }}"><strong>File:</strong> {{ batch.batch_import_filename }}</p>
                     </div>
                     <!-- Actions - Right Column -->
@@ -282,11 +299,11 @@
         </div>
         {% endif %}
         
-        {% if batch.status == 'completed' and match_stats.total > 0 %}
+        {% if batch.status == 'completed' and (match_stats.total > 0 or match_stats.orphans > 0) %}
         <div class="match-stats-bar mb-3 d-flex flex-wrap align-items-center justify-content-between">
             <div class="d-flex flex-wrap align-items-center">
                 <span class="stat-item">
-                    <span class="stat-label"><i class="bi bi-bar-chart me-1"></i>Total:</span>
+                    <span class="stat-label"><i class="bi bi-bar-chart me-1"></i>Imported:</span>
                     <span class="stat-value">{{ match_stats.total }}</span>
                 </span>
                 <span class="stat-item">
@@ -297,6 +314,10 @@
                     <span class="stat-label">Unmatched:</span>
                     <span class="stat-value text-muted">{{ match_stats.total - match_stats.matched }}</span>
                 </span>
+                <span class="stat-item">
+                    <span class="stat-label">Orphans:</span>
+                    <span class="stat-value" style="color: #856404;">{{ match_stats.orphans }}</span>
+                </span>
                 <span class="confidence-group">
                     <span class="badge bg-success" title="High Confidence">H: {{ match_stats.high_confidence }}</span>
                     <span class="badge bg-warning text-dark" title="Medium Confidence">M: {{ match_stats.medium_confidence }}</span>
@@ -304,7 +325,7 @@
                 </span>
             </div>
             <div class="d-flex align-items-center">
-                {% set match_pct = (match_stats.matched / match_stats.total * 100)|round %}
+                {% set match_pct = match_stats.total > 0 ? (match_stats.matched / match_stats.total * 100)|round : 0 %}
                 <div class="progress me-2" style="width: 100px; height: 8px;">
                     <div class="progress-bar bg-success" style="width: {{ match_pct }}%"></div>
                 </div>
@@ -313,16 +334,20 @@
         </div>
         {% endif %}
         
-        {% if transactions|length > 0 %}
+        {% if combined_transactions|length > 0 %}
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-list-ul"></i> Transactions ({{ transactions|length }})</h5>
+                <h5 class="mb-0"><i class="bi bi-list-ul"></i> Transactions ({{ transactions|length }}{% if orphans|length > 0 %} + {{ orphans|length }} orphans{% endif %})</h5>
                 <div class="d-flex align-items-center gap-3">
                     <label class="small mb-0 me-1">Filter:</label>
                     <select class="form-select form-select-sm" id="transactionFilter" onchange="applyTransactionFilter()" style="width: auto;">
                         <option value="all">All transactions</option>
                         <option value="hide-matched">Hide Matched</option>
                         <option value="hide-matched-pushed">Hide Matched & Pushed</option>
+                        {% if orphans|length > 0 %}
+                        <option value="orphans-only">Orphans Only</option>
+                        <option value="hide-orphans">Hide Orphans</option>
+                        {% endif %}
                     </select>
                     {% if match_stats.matched > 0 %}
                     <span class="badge bg-info">{{ match_stats.matched }} matched</span>
@@ -342,8 +367,34 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for txn in transactions %}
+                            {% for item in combined_transactions %}
                             {% set row_class = loop.index is odd ? 'row-odd' : 'row-even' %}
+                            
+                            {% if item._type == 'orphan' %}
+                            {# Orphan transaction row #}
+                            <tr class="orphan-row {{ row_class }}" data-orphan="true">
+                                <td>{{ item.transaction_date }}</td>
+                                <td>{{ item.akaunting_number ?: item.reference ?: '-' }}</td>
+                                <td>
+                                    {% if item.contact %}{{ item.contact }}{% endif %}
+                                    {% if item.category %}({{ item.category }}){% endif %}
+                                    {% if item.description and (not item.contact and not item.category) %}
+                                        {{ item.description }}
+                                    {% endif %}
+                                    {% if not item.contact and not item.category and not item.description %}-{% endif %}
+                                </td>
+                                <td class="text-end {% if item.type == 'expense' or item.type == 'expense-transfer' %}amount-debit{% else %}amount-credit{% endif %}">
+                                    {{ item.currency_code }} {{ item.amount|number_format(2) }}
+                                </td>
+                                <td>
+                                    <span class="badge orphan-badge" title="Transaction exists in Akaunting but not in imported data">
+                                        <i class="bi bi-exclamation-triangle"></i> Orphan
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            {# Regular imported transaction row #}
+                            {% set txn = item %}
                             {% set is_pushed = txn.status == 'processed' %}
                             <tr class="transaction-row {{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}{% if is_pushed %} has-pushed{% endif %}">
                                 <td>{{ txn.transaction_date }}</td>
@@ -659,6 +710,7 @@
                                 </td>
                             </tr>
                             {% endif %}
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -825,6 +877,7 @@ function applyTransactionFilter() {
     const filterSelect = document.getElementById('transactionFilter');
     const filterValue = filterSelect ? filterSelect.value : 'all';
     const rows = document.querySelectorAll('.transaction-table tbody tr');
+    const isOrphan = (row) => row.classList.contains('orphan-row') || row.dataset.orphan === 'true';
     
     rows.forEach(row => {
         // Always hide push-row and replicate-row (they're toggled separately)
@@ -833,7 +886,7 @@ function applyTransactionFilter() {
         }
         
         if (filterValue === 'all') {
-            // Show all except push-rows, replicate-rows, and match-rows (match-rows shown with their parent)
+            // Show all except push-rows, replicate-rows
             if (!row.classList.contains('match-row')) {
                 row.style.display = '';
             } else {
@@ -844,10 +897,8 @@ function applyTransactionFilter() {
             // Hide matched rows that are NOT pushed (only matched, not pushed)
             // Pushed transactions should still show even if they have a match
             if (row.classList.contains('match-row')) {
-                // Hide match-row if parent is hidden (matched but not pushed)
                 row.style.display = 'none';
             } else if (row.classList.contains('has-match') && !row.classList.contains('has-pushed')) {
-                // Hide matched rows that are NOT pushed
                 row.style.display = 'none';
             } else {
                 row.style.display = '';
@@ -859,6 +910,22 @@ function applyTransactionFilter() {
             } else {
                 row.style.display = '';
             }
+        } else if (filterValue === 'orphans-only') {
+            // Show only orphan rows
+            if (isOrphan(row)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        } else if (filterValue === 'hide-orphans') {
+            // Hide orphan rows, show everything else (except match rows which follow parent)
+            if (isOrphan(row)) {
+                row.style.display = 'none';
+            } else if (row.classList.contains('match-row')) {
+                row.style.display = '';
+            } else {
+                row.style.display = '';
+            }
         }
     });
     
@@ -866,11 +933,12 @@ function applyTransactionFilter() {
     const visibleCount = document.querySelectorAll('.transaction-table tbody tr:not(.match-row):not(.push-row):not(.replicate-row):not([style*="display: none"])').length;
     const headerTitle = document.querySelector('.card-header h5');
     if (headerTitle) {
-        const totalCount = {{ transactions|length }};
+        const importedCount = {{ transactions|length }};
+        const orphanCount = {{ orphans|length }};
         if (filterValue !== 'all') {
-            headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + visibleCount + ' of ' + totalCount + ')';
+            headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (showing ' + visibleCount + ' of ' + importedCount + (orphanCount > 0 ? ' + ' + orphanCount + ' orphans' : '') + ')';
         } else {
-            headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + totalCount + ')';
+            headerTitle.innerHTML = '<i class="bi bi-list-ul"></i> Transactions (' + importedCount + (orphanCount > 0 ? ' + ' + orphanCount + ' orphans' : '') + ')';
         }
     }
 }

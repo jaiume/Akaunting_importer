@@ -282,6 +282,31 @@ CREATE TABLE IF NOT EXISTS `vendor_mappings` (
   CONSTRAINT `vendor_mappings_ibfk_1` FOREIGN KEY (`installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Akaunting orphan transactions table
+-- Stores transactions from Akaunting that exist within the batch date range
+-- but have no matching imported transaction (orphans)
+CREATE TABLE IF NOT EXISTS `akaunting_orphan_transactions` (
+  `orphan_id` int(11) NOT NULL AUTO_INCREMENT,
+  `batch_id` int(11) NOT NULL COMMENT 'The batch this orphan was detected for',
+  `akaunting_id` int(11) NOT NULL COMMENT 'Transaction ID in Akaunting',
+  `akaunting_number` varchar(50) DEFAULT NULL COMMENT 'Transaction number from Akaunting',
+  `transaction_date` date NOT NULL,
+  `amount` decimal(15,2) NOT NULL,
+  `type` varchar(50) DEFAULT NULL COMMENT 'income, expense, income-transfer, expense-transfer',
+  `description` text DEFAULT NULL,
+  `reference` varchar(255) DEFAULT NULL,
+  `contact` varchar(255) DEFAULT NULL COMMENT 'Vendor/Customer name',
+  `category` varchar(255) DEFAULT NULL COMMENT 'Category name',
+  `currency_code` varchar(10) DEFAULT 'TTD',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`orphan_id`),
+  KEY `batch_id` (`batch_id`),
+  KEY `akaunting_id` (`akaunting_id`),
+  KEY `transaction_date` (`transaction_date`),
+  UNIQUE KEY `batch_akaunting` (`batch_id`, `akaunting_id`),
+  CONSTRAINT `akaunting_orphan_transactions_ibfk_1` FOREIGN KEY (`batch_id`) REFERENCES `import_batches` (`batch_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Cross-entity mappings table
 -- Maps vendor/category selections from one entity to another for cross-entity replication
 -- When a transaction is replicated to another entity, the mapping is saved for pre-selection
