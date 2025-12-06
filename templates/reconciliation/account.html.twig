@@ -1,0 +1,506 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Account Reconciliation - {{ account.account_name }} - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .reconciliation-summary {
+        background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+        color: white;
+        border-radius: 0.5rem;
+    }
+    .transaction-table {
+        font-size: 0.9rem;
+    }
+    .amount-credit {
+        color: #198754;
+    }
+    .amount-debit {
+        color: #dc3545;
+    }
+    /* Default border for all rows */
+    .transaction-table tbody tr {
+        border-bottom: 1px solid #e9ecef;
+    }
+    .transaction-table tbody tr.row-odd td {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+    .transaction-table tbody tr.row-even td {
+        background-color: #fff;
+    }
+    /* Missing transaction rows - light red */
+    .missing-row {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%) !important;
+    }
+    .missing-row td {
+        border-left: 3px solid #dc3545;
+    }
+    .missing-row:hover td {
+        background: linear-gradient(135deg, #f1aeb5 0%, #ea868f 100%) !important;
+    }
+    /* Orphan transaction rows - yellow */
+    .orphan-row {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%) !important;
+    }
+    .orphan-row td {
+        border-left: 3px solid #ffc107;
+    }
+    .orphan-row:hover td {
+        background: linear-gradient(135deg, #ffe69c 0%, #ffd43b 100%) !important;
+    }
+    /* Matched rows - light green */
+    .matched-row td {
+        border-left: 3px solid #28a745;
+    }
+    .orphan-badge {
+        background-color: #ffc107;
+        color: #212529;
+        font-size: 0.7rem;
+    }
+    .missing-badge {
+        background-color: #dc3545;
+        color: white;
+        font-size: 0.7rem;
+    }
+    .stats-bar {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
+    .stats-bar .stat-item {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 1.5rem;
+        font-size: 0.9rem;
+    }
+    .stats-bar .stat-label {
+        color: #6c757d;
+        margin-right: 0.35rem;
+    }
+    .stats-bar .stat-value {
+        font-weight: 600;
+    }
+    .progress-container {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item">{{ entity.entity_name }}</li>
+                <li class="breadcrumb-item active">{{ account.account_name }} Reconciliation</li>
+            </ol>
+        </nav>
+        
+        <h1 class="mb-4">
+            <i class="bi bi-search"></i> Account Reconciliation
+        </h1>
+        
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> {{ success }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        <!-- Account Summary -->
+        <div class="card reconciliation-summary mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Entity:</strong> {{ entity.entity_name }}</p>
+                        <p class="mb-1"><strong>Account:</strong> {{ account.account_name }}</p>
+                        <p class="mb-1"><strong>Account Type:</strong> {{ account.account_type|capitalize }}</p>
+                        {% if account.akaunting_account_name %}
+                        <p class="mb-0"><strong>Akaunting Account:</strong> {{ account.akaunting_account_name }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {% if date_range.start and date_range.end %}
+                        <p class="mb-1"><strong>Date Range:</strong> {{ date_range.start }} to {{ date_range.end }}</p>
+                        {% else %}
+                        <p class="mb-1"><strong>Date Range:</strong> <span class="text-white-50">No transactions</span></p>
+                        {% endif %}
+                        {% if can_reconcile %}
+                        <p class="mb-0 text-white-50 small">
+                            <i class="bi bi-info-circle"></i> 
+                            Comparing all imported transactions across all batches with Akaunting
+                        </p>
+                        {% else %}
+                        <p class="mb-0 text-warning">
+                            <i class="bi bi-exclamation-triangle"></i> {{ reconcile_reason }}
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if can_reconcile %}
+        <!-- Stats Bar -->
+        <div class="stats-bar mb-3 d-flex flex-wrap align-items-center justify-content-between">
+            <div class="d-flex flex-wrap align-items-center">
+                <span class="stat-item">
+                    <span class="stat-label"><i class="bi bi-bar-chart me-1"></i>Imported:</span>
+                    <span class="stat-value" id="stat-imported">{{ stats.total_imported }}</span>
+                </span>
+                <span class="stat-item">
+                    <span class="stat-label">Matched:</span>
+                    <span class="stat-value text-success" id="stat-matched">{{ stats.matched }}</span>
+                </span>
+                <span class="stat-item">
+                    <span class="stat-label">Missing:</span>
+                    <span class="stat-value text-danger" id="stat-missing">{{ stats.missing }}</span>
+                </span>
+                <span class="stat-item">
+                    <span class="stat-label">Orphans:</span>
+                    <span class="stat-value" style="color: #856404;" id="stat-orphans">-</span>
+                </span>
+            </div>
+            <div class="d-flex align-items-center" id="match-percent-container">
+                {% if stats.total_imported > 0 %}
+                {% set match_pct = (stats.matched / stats.total_imported * 100)|round %}
+                <div class="progress me-2" style="width: 100px; height: 8px;">
+                    <div class="progress-bar bg-success" id="match-progress-bar" style="width: {{ match_pct }}%"></div>
+                </div>
+                <small class="text-muted" id="match-percent">{{ match_pct }}% matched</small>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Progress Container (shown during fetching) -->
+        <div class="card mb-3" id="progress-card">
+            <div class="card-body progress-container">
+                <div class="mb-3">
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    <span id="progress-status">Fetching Akaunting transactions...</span>
+                </div>
+                <div class="progress mb-2" style="height: 20px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <small class="text-muted" id="progress-detail">Starting...</small>
+            </div>
+        </div>
+        
+        <!-- Transactions Card (hidden until reconciliation complete) -->
+        <div class="card" id="transactions-card" style="display: none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" id="transactions-header">
+                    <i class="bi bi-list-ul"></i> 
+                    Transactions
+                </h5>
+                <div class="d-flex align-items-center gap-3">
+                    <label class="small mb-0 me-1">Filter:</label>
+                    <select class="form-select form-select-sm" id="transactionFilter" onchange="applyTransactionFilter()" style="width: auto;">
+                        <option value="all">All transactions</option>
+                        <option value="missing-only">Missing Only</option>
+                        <option value="orphans-only">Orphans Only</option>
+                        <option value="matched-only">Matched Only</option>
+                        <option value="hide-matched">Hide Matched</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover transaction-table mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th style="width: 110px;">Date</th>
+                                <th style="width: 120px;">Reference</th>
+                                <th>Description</th>
+                                <th style="width: 100px;">Batch</th>
+                                <th class="text-end" style="width: 130px;">Amount</th>
+                                <th style="width: 120px;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactions-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- No Transactions Message -->
+        <div class="card" id="no-transactions-card" style="display: none;">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-inbox fs-1 text-muted"></i>
+                <p class="text-muted mt-3 mb-0">
+                    No transactions found for this account. Import some batches first.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const accountId = {{ account.account_id }};
+const baseUrl = '{{ base_url }}';
+const startDate = '{{ date_range.start }}';
+const endDate = '{{ date_range.end }}';
+const canReconcile = {{ can_reconcile ? 'true' : 'false' }};
+const totalImported = {{ stats.total_imported }};
+
+let allAkauntingTransactions = [];
+let reconciliationStats = null;
+let combinedTransactions = [];
+
+// Start fetching on page load
+document.addEventListener('DOMContentLoaded', function() {
+    if (canReconcile && startDate && endDate && totalImported > 0) {
+        startFetching();
+    } else if (canReconcile && totalImported === 0) {
+        document.getElementById('progress-card').style.display = 'none';
+        document.getElementById('no-transactions-card').style.display = 'block';
+    } else {
+        document.getElementById('progress-card').style.display = 'none';
+    }
+});
+
+function startFetching() {
+    fetchPage(1);
+}
+
+function fetchPage(page) {
+    fetch(baseUrl + 'reconciliation/account/' + accountId + '/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            page: page,
+            start_date: startDate,
+            end_date: endDate
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'error') {
+            showError(data.message);
+            return;
+        }
+        
+        // Add transactions to our collection
+        if (data.transactions && data.transactions.length > 0) {
+            allAkauntingTransactions = allAkauntingTransactions.concat(data.transactions);
+        }
+        
+        // Update progress
+        const percent = data.total_pages > 0 ? Math.round((data.current_page / data.total_pages) * 100) : 100;
+        updateProgress(percent, data.message, `Fetched ${allAkauntingTransactions.length} Akaunting transactions`);
+        
+        if (data.status === 'complete') {
+            // All pages fetched, perform reconciliation
+            updateProgress(100, 'Performing reconciliation...', `Comparing ${totalImported} imported with ${allAkauntingTransactions.length} Akaunting transactions`);
+            performReconciliation();
+        } else {
+            // Fetch next page
+            fetchPage(data.current_page + 1);
+        }
+    })
+    .catch(error => {
+        showError('Request failed: ' + error.message);
+    });
+}
+
+function performReconciliation() {
+    fetch(baseUrl + 'reconciliation/account/' + accountId + '/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            akaunting_transactions: allAkauntingTransactions
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'error') {
+            showError(data.message);
+            return;
+        }
+        
+        // Store results
+        reconciliationStats = data.stats;
+        combinedTransactions = data.combined_transactions;
+        
+        // Update stats
+        document.getElementById('stat-imported').textContent = data.stats.total_imported;
+        document.getElementById('stat-matched').textContent = data.stats.matched;
+        document.getElementById('stat-missing').textContent = data.stats.missing;
+        document.getElementById('stat-orphans').textContent = data.stats.orphans;
+        
+        // Update progress bar
+        if (data.stats.total_imported > 0) {
+            const matchPct = Math.round((data.stats.matched / data.stats.total_imported) * 100);
+            document.getElementById('match-progress-bar').style.width = matchPct + '%';
+            document.getElementById('match-percent').textContent = matchPct + '% matched';
+        }
+        
+        // Hide progress, show results
+        document.getElementById('progress-card').style.display = 'none';
+        
+        if (combinedTransactions.length > 0) {
+            renderTransactions();
+            document.getElementById('transactions-card').style.display = 'block';
+        } else {
+            document.getElementById('no-transactions-card').style.display = 'block';
+        }
+    })
+    .catch(error => {
+        showError('Reconciliation failed: ' + error.message);
+    });
+}
+
+function updateProgress(percent, status, detail) {
+    document.getElementById('progress-bar').style.width = percent + '%';
+    document.getElementById('progress-bar').textContent = percent + '%';
+    document.getElementById('progress-status').textContent = status;
+    document.getElementById('progress-detail').textContent = detail;
+}
+
+function showError(message) {
+    document.getElementById('progress-card').innerHTML = `
+        <div class="card-body progress-container">
+            <div class="text-danger">
+                <i class="bi bi-exclamation-triangle fs-3 mb-2"></i>
+                <p class="mb-0">${message}</p>
+            </div>
+        </div>
+    `;
+}
+
+function renderTransactions() {
+    const tbody = document.getElementById('transactions-tbody');
+    tbody.innerHTML = '';
+    
+    const orphanCount = reconciliationStats.orphans;
+    document.getElementById('transactions-header').innerHTML = 
+        '<i class="bi bi-list-ul"></i> Transactions (' + reconciliationStats.total_imported + 
+        (orphanCount > 0 ? ' + ' + orphanCount + ' orphans' : '') + ')';
+    
+    combinedTransactions.forEach((item, index) => {
+        const rowClass = index % 2 === 0 ? 'row-odd' : 'row-even';
+        let row;
+        
+        if (item._type === 'orphan') {
+            // Orphan row
+            const amountClass = (item.type === 'expense' || item.type === 'expense-transfer') ? 'amount-debit' : 'amount-credit';
+            let description = '';
+            if (item.contact) description += item.contact;
+            if (item.category) description += (description ? ' ' : '') + '(' + item.category + ')';
+            if (!description && item.description) description = item.description;
+            if (!description) description = '-';
+            
+            row = `
+                <tr class="orphan-row ${rowClass}" data-status="orphan">
+                    <td>${item.date}</td>
+                    <td>${item.number || item.reference || '-'}</td>
+                    <td>${escapeHtml(description)}</td>
+                    <td><span class="text-muted small">-</span></td>
+                    <td class="text-end ${amountClass}">${item.currency_code} ${formatNumber(item.amount)}</td>
+                    <td>
+                        <span class="badge orphan-badge" title="Transaction exists in Akaunting but not in any imported batch">
+                            <i class="bi bi-exclamation-triangle"></i> Orphan
+                        </span>
+                    </td>
+                </tr>
+            `;
+        } else {
+            // Imported transaction row
+            const isMatched = item.matched_akaunting_id != null;
+            const statusClass = isMatched ? 'matched-row' : 'missing-row';
+            const amountClass = item.transaction_amount < 0 ? 'amount-debit' : 'amount-credit';
+            const batchName = item.batch_name || '';
+            const truncatedBatch = batchName.length > 15 ? batchName.substring(0, 15) + '...' : batchName;
+            
+            row = `
+                <tr class="${statusClass} ${rowClass}" data-status="${isMatched ? 'matched' : 'missing'}">
+                    <td>${item.transaction_date}</td>
+                    <td>${item.bank_ref || '-'}</td>
+                    <td>${escapeHtml(item.description || '')}</td>
+                    <td>
+                        <a href="${baseUrl}import/batch/${item.batch_id}" class="text-decoration-none small" title="${escapeHtml(batchName)}">
+                            ${escapeHtml(truncatedBatch)}
+                        </a>
+                    </td>
+                    <td class="text-end ${amountClass}">${item.transaction_currency} ${formatNumber(item.transaction_amount)}</td>
+                    <td>
+                        ${isMatched 
+                            ? `<span class="badge bg-success" title="Matched to Akaunting #${item.matched_akaunting_number || ''}"><i class="bi bi-check-circle"></i> Matched</span>`
+                            : `<span class="badge missing-badge" title="Not found in Akaunting"><i class="bi bi-x-circle"></i> Missing</span>`
+                        }
+                    </td>
+                </tr>
+            `;
+        }
+        
+        tbody.innerHTML += row;
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatNumber(num) {
+    return parseFloat(num).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function applyTransactionFilter() {
+    const filterSelect = document.getElementById('transactionFilter');
+    const filterValue = filterSelect ? filterSelect.value : 'all';
+    const rows = document.querySelectorAll('.transaction-table tbody tr');
+    
+    rows.forEach(row => {
+        const status = row.dataset.status;
+        
+        if (filterValue === 'all') {
+            row.style.display = '';
+        } else if (filterValue === 'missing-only') {
+            row.style.display = status === 'missing' ? '' : 'none';
+        } else if (filterValue === 'orphans-only') {
+            row.style.display = status === 'orphan' ? '' : 'none';
+        } else if (filterValue === 'matched-only') {
+            row.style.display = status === 'matched' ? '' : 'none';
+        } else if (filterValue === 'hide-matched') {
+            row.style.display = status === 'matched' ? 'none' : '';
+        }
+    });
+    
+    // Update visible count
+    const visibleCount = document.querySelectorAll('.transaction-table tbody tr:not([style*="display: none"])').length;
+    const totalAll = reconciliationStats.total_imported + reconciliationStats.orphans;
+    const orphanCount = reconciliationStats.orphans;
+    
+    if (filterValue !== 'all') {
+        document.getElementById('transactions-header').innerHTML = 
+            '<i class="bi bi-list-ul"></i> Transactions (showing ' + visibleCount + ' of ' + totalAll + ')';
+    } else {
+        document.getElementById('transactions-header').innerHTML = 
+            '<i class="bi bi-list-ul"></i> Transactions (' + reconciliationStats.total_imported + 
+            (orphanCount > 0 ? ' + ' + orphanCount + ' orphans' : '') + ')';
+    }
+}
+</script>
+{% endblock %}

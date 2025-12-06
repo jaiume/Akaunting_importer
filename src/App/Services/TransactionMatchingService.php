@@ -1330,5 +1330,177 @@ class TransactionMatchingService
             'message' => 'Transaction replicated to ' . $installation['name']
         ];
     }
+
+    /**
+     * Check if an account can be reconciled (has linked Akaunting account)
+     */
+    public function canReconcileAccount(int $accountId, int $userId): array
+    {
+        $account = $this->accountDAO->findById($accountId);
+        
+        if (!$account) {
+            return ['can_reconcile' => false, 'reason' => 'Account not found'];
+        }
+        
+        if (empty($account['akaunting_account_id'])) {
+            return ['can_reconcile' => false, 'reason' => 'Account is not linked to an Akaunting account'];
+        }
+        
+        // Get entity's installation
+        $installation = $this->installationDAO->findByEntityId($account['entity_id']);
+        if (!$installation) {
+            return ['can_reconcile' => false, 'reason' => 'No Akaunting installation configured for this entity'];
+        }
+        
+        return [
+            'can_reconcile' => true,
+            'account' => $account,
+            'installation' => $installation
+        ];
+    }
+
+    /**
+     * Get basic account reconciliation info (without fetching Akaunting data)
+     * Used for initial page load
+     */
+    public function getAccountReconciliationInfo(int $accountId, int $userId): array
+    {
+        // Check if we can reconcile
+        $canReconcile = $this->canReconcileAccount($accountId, $userId);
+        if (!$canReconcile['can_reconcile']) {
+            throw new \Exception($canReconcile['reason']);
+        }
+        
+        $account = $canReconcile['account'];
+        $installation = $canReconcile['installation'];
+        
+        // Get all transactions for this account
+        $importedTransactions = $this->transactionDAO->findByAccountId($accountId);
+        
+        // Get date range
+        $dateRange = ['start' => null, 'end' => null];
+        if (!empty($importedTransactions)) {
+            $dates = array_column($importedTransactions, 'transaction_date');
+            $dateRange['start'] = min($dates);
+            $dateRange['end'] = max($dates);
+        }
+        
+        // Calculate basic stats from imported transactions
+        $totalImported = count($importedTransactions);
+        $matched = 0;
+        foreach ($importedTransactions as $txn) {
+            if (!empty($txn['matched_akaunting_id'])) {
+                $matched++;
+            }
+        }
+        
+        return [
+            'account' => $account,
+            'installation' => $installation,
+            'date_range' => $dateRange,
+            'imported_transactions' => $importedTransactions,
+            'stats' => [
+                'total_imported' => $totalImported,
+                'matched' => $matched,
+                'missing' => $totalImported - $matched,
+                'orphans' => 0  // Will be calculated after fetching Akaunting data
+            ]
+        ];
+    }
+
+    /**
+     * Fetch one page of Akaunting transactions for reconciliation (chunked)
+     */
+    public function fetchReconciliationPage(int $accountId, int $userId, int $page, ?string $startDate = null, ?string $endDate = null): array
+    {
+        // Check if we can reconcile
+        $canReconcile = $this->canReconcileAccount($accountId, $userId);
+        if (!$canReconcile['can_reconcile']) {
+            throw new \Exception($canReconcile['reason']);
+        }
+        
+        $account = $canReconcile['account'];
+        $installation = $canReconcile['installation'];
+        
+        // If no dates provided, get from account transactions
+        if (!$startDate || !$endDate) {
+            $dateRange = $this->transactionDAO->getAccountDateRange($accountId);
+            $startDate = $dateRange['start'];
+            $endDate = $dateRange['end'];
+        }
+        
+        if (!$startDate || !$endDate) {
+            return [
+                'status' => 'complete',
+                'transactions' => [],
+                'current_page' => 0,
+                'total_pages' => 0,
+                'message' => 'No transactions to reconcile'
+            ];
+        }
+        
+        // Fetch page from Akaunting
+        $pageInfo = $this->fetchAkauntingPage(
+            $installation,
+            $account['akaunting_account_id'],
+            $startDate,
+            $endDate,
+            $page
+        );
+        
+        $isComplete = $page >= $pageInfo['total_pages'];
+        
+        return [
+            'status' => $isComplete ? 'complete' : 'fetching',
+            'transactions' => $pageInfo['transactions'],
+            'current_page' => $page,
+            'total_pages' => $pageInfo['total_pages'],
+            'message' => $isComplete 
+                ? "Fetched all {$pageInfo['total_pages']} pages" 
+                : "Fetching page {$page} of {$pageInfo['total_pages']}..."
+        ];
+    }
+
+    /**
+     * Perform reconciliation comparison given fetched Akaunting transactions
+     */
+    public function performReconciliation(int $accountId, array $akauntingTransactions): array
+    {
+        // Get all imported transactions for this account
+        $importedTransactions = $this->transactionDAO->findByAccountId($accountId);
+        
+        // Build a map of matched Akaunting IDs from imported transactions
+        $matchedAkauntingIds = [];
+        foreach ($importedTransactions as $txn) {
+            if (!empty($txn['matched_akaunting_id'])) {
+                $matchedAkauntingIds[$txn['matched_akaunting_id']] = true;
+            }
+        }
+        
+        // Find orphans - Akaunting transactions not matched to any import
+        $orphanTransactions = [];
+        foreach ($akauntingTransactions as $akTxn) {
+            if (!isset($matchedAkauntingIds[$akTxn['id']])) {
+                $orphanTransactions[] = $akTxn;
+            }
+        }
+        
+        // Calculate stats
+        $totalImported = count($importedTransactions);
+        $matched = count($matchedAkauntingIds);
+        $missing = $totalImported - $matched;
+        $orphans = count($orphanTransactions);
+        
+        return [
+            'imported_transactions' => $importedTransactions,
+            'orphan_transactions' => $orphanTransactions,
+            'stats' => [
+                'total_imported' => $totalImported,
+                'matched' => $matched,
+                'missing' => $missing,
+                'orphans' => $orphans
+            ]
+        ];
+    }
 }
 

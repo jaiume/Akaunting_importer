@@ -35,6 +35,7 @@ use App\Controllers\AccountController;
 use App\Controllers\InstallationController;
 use App\Controllers\ImportController;
 use App\Controllers\ApiController;
+use App\Controllers\ReconciliationController;
 
 // Middleware
 use App\Middleware\AuthenticationMiddleware;
@@ -264,6 +265,15 @@ $containerBuilder->addDefinitions([
             $c->get('view'),
             $c->get(InstallationService::class),
             $c->get(EntityService::class)
+        );
+    },
+    
+    ReconciliationController::class => function (ContainerInterface $c) {
+        return new ReconciliationController(
+            $c->get('view'),
+            $c->get(TransactionMatchingService::class),
+            $c->get(EntityService::class),
+            $c->get(AccountDAO::class)
         );
     },
 ]);

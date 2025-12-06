@@ -257,6 +257,73 @@ class TransactionDAO
             'entity_id' => $entityId,
         ]);
     }
+
+    /**
+     * Get all transactions for an account across all batches
+     * Only includes transactions from completed batches
+     */
+    public function findByAccountId(int $accountId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT t.*, b.batch_name, b.batch_id
+            FROM import_transactions t
+            JOIN import_batches b ON t.batch_id = b.batch_id
+            WHERE b.account_id = :account_id
+              AND b.status = 'completed'
+            ORDER BY t.transaction_date, t.transaction_id
+        ");
+        $stmt->execute(['account_id' => $accountId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Get date range of all transactions for an account
+     */
+    public function getAccountDateRange(int $accountId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT 
+                MIN(t.transaction_date) as min_date,
+                MAX(t.transaction_date) as max_date
+            FROM import_transactions t
+            JOIN import_batches b ON t.batch_id = b.batch_id
+            WHERE b.account_id = :account_id
+              AND b.status = 'completed'
+        ");
+        $stmt->execute(['account_id' => $accountId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return [
+            'start' => $result['min_date'] ?? null,
+            'end' => $result['max_date'] ?? null
+        ];
+    }
+
+    /**
+     * Get match statistics for an account (across all batches)
+     */
+    public function getAccountMatchStats(int $accountId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN t.matched_akaunting_id IS NOT NULL THEN 1 ELSE 0 END) as matched,
+                SUM(CASE WHEN t.match_confidence = 'high' THEN 1 ELSE 0 END) as high_confidence,
+                SUM(CASE WHEN t.match_confidence = 'medium' THEN 1 ELSE 0 END) as medium_confidence,
+                SUM(CASE WHEN t.match_confidence = 'low' THEN 1 ELSE 0 END) as low_confidence
+            FROM import_transactions t
+            JOIN import_batches b ON t.batch_id = b.batch_id
+            WHERE b.account_id = :account_id
+              AND b.status = 'completed'
+        ");
+        $stmt->execute(['account_id' => $accountId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: [
+            'total' => 0,
+            'matched' => 0,
+            'high_confidence' => 0,
+            'medium_confidence' => 0,
+            'low_confidence' => 0
+        ];
+    }
 }
 
 

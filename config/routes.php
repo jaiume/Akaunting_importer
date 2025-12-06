@@ -13,6 +13,7 @@ use App\Controllers\AccountController;
 use App\Controllers\InstallationController;
 use App\Controllers\ImportController;
 use App\Controllers\ApiController;
+use App\Controllers\ReconciliationController;
 
 // Middleware
 use App\Middleware\AuthenticationMiddleware;
@@ -95,6 +96,11 @@ return function (App $app) {
         $group->post('/import/batch/{batch_id}/delete', [ImportController::class, 'deleteBatch']);
         $group->post('/import/batch/{batch_id}/archive', [ImportController::class, 'archiveBatch']);
         $group->post('/import/batch/{batch_id}/unarchive', [ImportController::class, 'unarchiveBatch']);
+        
+        // Reconciliation
+        $group->get('/reconciliation/account/{account_id}', [ReconciliationController::class, 'showAccountReconciliation']);
+        $group->post('/reconciliation/account/{account_id}/fetch', [ReconciliationController::class, 'fetchProgress']);
+        $group->post('/reconciliation/account/{account_id}/reconcile', [ReconciliationController::class, 'reconcile']);
         
     })->add($authMiddleware);
 
