@@ -117,7 +117,16 @@ class ImportController extends BaseController
                 'user_id' => $user['user_id'],
             ]);
 
-            return $this->redirect($response, '/import/batch/' . $batchId . '?success=uploaded');
+            // Automatically process the batch after creation
+            try {
+                $result = $this->importService->processBatch($batchId);
+                $successMsg = urlencode("Batch created and processed! {$result['transaction_count']} transactions extracted.");
+                return $this->redirect($response, '/import/batch/' . $batchId . '?success=' . $successMsg);
+            } catch (\Exception $processError) {
+                error_log('Auto-process error: ' . $processError->getMessage());
+                // Still redirect to batch page even if processing fails - user can retry
+                return $this->redirect($response, '/import/batch/' . $batchId . '?error=' . urlencode('Batch created but processing failed: ' . $processError->getMessage()));
+            }
         } catch (\Exception $e) {
             error_log('Import error: ' . $e->getMessage());
             return $this->redirect($response, '/import?error=' . urlencode($e->getMessage()));

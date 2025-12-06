@@ -769,14 +769,29 @@ function startMatching() {
     
     // Update UI
     document.getElementById('matchBtn').disabled = true;
-    document.getElementById('matchBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Matching...';
+    document.getElementById('matchBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Clearing & Matching...';
     document.getElementById('matchProgress').style.display = 'block';
     
     const clearBtn = document.getElementById('clearBtn');
     if (clearBtn) clearBtn.style.display = 'none';
     
-    // Start the matching process
-    processMatchStep();
+    // First reset/clear any existing matches, then start matching
+    fetch(baseUrl + 'import/batch/' + batchId + '/match-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Now start the matching process
+        document.getElementById('matchBtn').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Matching...';
+        processMatchStep();
+    })
+    .catch(error => {
+        // Still try to match even if reset fails
+        console.warn('Reset failed, continuing with match:', error);
+        processMatchStep();
+    });
 }
 
 function processMatchStep() {
