@@ -64,7 +64,7 @@ class BatchDAO
         if (!$includeArchived) {
             $sql .= " AND b.is_archived = 0";
         }
-        $sql .= " ORDER BY e.entity_name, a.account_name, b.created_at DESC";
+        $sql .= " ORDER BY e.entity_name, a.account_name, COALESCE((SELECT MIN(t.transaction_date) FROM import_transactions t WHERE t.batch_id = b.batch_id), b.created_at) DESC";
         if ($limit) {
             $sql .= " LIMIT " . (int)$limit;
         }
