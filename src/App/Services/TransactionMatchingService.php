@@ -1146,9 +1146,11 @@ class TransactionMatchingService
         ];
         
         // Add multi-currency fields if exchange rate is provided
-        if ($toAmount !== null && $currencyRate !== null && $currencyRate > 0) {
-            $transferData['to_amount'] = abs($toAmount);
-            $transferData['currency_rate'] = $currencyRate;
+        // Akaunting expects from_account_rate and to_account_rate (NOT to_amount/currency_rate)
+        // See: https://github.com/akaunting/akaunting/blob/master/app/Jobs/Banking/CreateTransfer.php
+        if ($currencyRate !== null && $currencyRate > 0) {
+            $transferData['from_account_rate'] = 1.0;  // Source currency rate (base)
+            $transferData['to_account_rate'] = $currencyRate;  // Destination currency rate
         }
 
         $url = rtrim($installation['base_url'], '/') . '/api/transfers';
