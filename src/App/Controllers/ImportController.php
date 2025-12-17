@@ -416,7 +416,8 @@ class ImportController extends BaseController
                     (int)$body['to_account_id'],
                     $body['payment_method'] ?? 'bank_transfer',
                     isset($body['to_amount']) ? (float)$body['to_amount'] : null,
-                    isset($body['currency_rate']) ? (float)$body['currency_rate'] : null
+                    isset($body['currency_rate']) ? (float)$body['currency_rate'] : null,
+                    $this->vendorDAO // Pass VendorDAO for saving transfer mapping
                 );
             } else {
                 $result = $this->matchingService->pushToAkaunting(
@@ -488,7 +489,7 @@ class ImportController extends BaseController
                 isset($body['currency_rate']) ? (float)$body['currency_rate'] : null
             );
 
-            // If successful, save replication status and cross-entity mapping
+            // If successful, save replication status and mappings
             if ($result['success']) {
                 // Save replication status on the source transaction
                 $this->transactionDAO->updateReplicationStatus(
@@ -498,11 +499,12 @@ class ImportController extends BaseController
                     (int)$body['entity_id']
                 );
                 
-                // Get the source installation ID for cross-entity mapping
+                // Get the source installation ID for mappings
                 $matchingInfo = $this->matchingService->canMatch($batchId, $user['user_id']);
                 if ($matchingInfo['can_match'] && isset($matchingInfo['installation'])) {
                     $sourceInstallationId = $matchingInfo['installation']['installation_id'];
                     
+                    // Save cross-entity mapping (legacy - based on vendor/category IDs)
                     $this->installationService->saveCrossEntityMapping(
                         $sourceInstallationId,
                         !empty($body['source_vendor_id']) ? (int)$body['source_vendor_id'] : null,
@@ -513,6 +515,28 @@ class ImportController extends BaseController
                         (int)$body['account_id'],
                         $body['payment_method'] ?? null
                     );
+                    
+                    // Save replication transaction mapping (new - based on description pattern)
+                    // This enables predictive entity and field selection for future replications
+                    if (!empty($sourceTxn['description'])) {
+                        try {
+                            $this->installationService->saveReplicationMapping(
+                                $sourceInstallationId,
+                                (int)$body['installation_id'],
+                                $sourceTxn['description'],
+                                $body['type'] ?? null, // transaction type (income/expense)
+                                !empty($body['contact_id']) ? (int)$body['contact_id'] : null,
+                                $body['contact_name'] ?? null,
+                                !empty($body['category_id']) ? (int)$body['category_id'] : null,
+                                $body['category_name'] ?? null,
+                                (int)$body['account_id'],
+                                $body['payment_method'] ?? null
+                            );
+                        } catch (\Exception $e) {
+                            // Don't fail the whole operation if mapping save fails
+                            error_log('Failed to save replication mapping: ' . $e->getMessage());
+                        }
+                    }
                 }
             }
             
@@ -687,17 +711,19 @@ class ImportController extends BaseController
                 error_log('Failed to fetch Akaunting accounts: ' . $e->getMessage());
             }
 
-            // Check for suggested mapping based on description (vendor + category + payment method)
+            // Check for suggested mapping based on description (type + vendor + category + payment method + transfer account)
             $suggested = null;
             if ($description) {
                 $mapping = $this->vendorDAO->findBestTransactionMapping($installationId, $description);
                 if ($mapping) {
                     $suggested = [
+                        'transaction_type' => $mapping['transaction_type'],
                         'vendor_id' => $mapping['akaunting_contact_id'],
                         'vendor_name' => $mapping['contact_name'],
                         'category_id' => $mapping['akaunting_category_id'],
                         'category_name' => $mapping['category_name'],
                         'payment_method' => $mapping['payment_method'],
+                        'transfer_to_account_id' => $mapping['transfer_to_account_id'],
                         'usage_count' => $mapping['usage_count']
                     ];
                 }

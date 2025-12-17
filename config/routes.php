@@ -119,6 +119,9 @@ return function (App $app) {
         // Get entities with installations (for cross-entity replication)
         $group->get('/entities-with-installations', [ApiController::class, 'getEntitiesWithInstallations']);
         
+        // Get replication prediction based on transaction description (for immediate entity pre-selection)
+        $group->get('/replication-prediction', [ApiController::class, 'getReplicationPrediction']);
+        
         // Account linking (links stored directly on accounts table)
         $group->get('/accounts/{account_id}/link', [ApiController::class, 'getAccountLinks']);
         $group->post('/accounts/{account_id}/link', [ApiController::class, 'saveAccountLink']);

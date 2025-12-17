@@ -593,7 +593,8 @@
                                 <td colspan="5">
                                     <div class="replicate-form p-3 border-top" style="background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);">
                                         <div class="small text-muted mb-2"><i class="bi bi-copy"></i> Replicate to another entity</div>
-                                        <form id="replicate-form-{{ txn.transaction_id }}" onsubmit="return replicateToEntity({{ txn.transaction_id }}, event)">
+                                        <form id="replicate-form-{{ txn.transaction_id }}" onsubmit="return replicateToEntity({{ txn.transaction_id }}, event)"
+                                              data-description="{{ txn.description|e('html_attr') }}">
                                             <input type="hidden" name="source_transaction_id" value="{{ txn.transaction_id }}">
                                             {# Note: source vendor/category IDs not currently stored; mapping will use description-based matching #}
                                             <input type="hidden" name="source_vendor_id" value="">
@@ -1036,7 +1037,57 @@ function loadFormDataForRow(transactionId) {
 function populateFormSelects(transactionId, data, description) {
     // Get the type select to determine contact type (vendor/customer) and category filter
     const typeSelect = document.getElementById('type-select-' + transactionId);
-    const selectedType = typeSelect ? typeSelect.value : 'expense';
+    let selectedType = typeSelect ? typeSelect.value : 'expense';
+    
+    // Check for predicted transaction type and switch if different from current selection
+    const predictedType = data.suggested?.transaction_type;
+    if (predictedType && typeSelect && predictedType !== selectedType) {
+        // Switch to the predicted type
+        typeSelect.value = predictedType;
+        selectedType = predictedType;
+        
+        // Get amount from data attribute for transfer field population
+        const amount = parseFloat(typeSelect.dataset.amount || 0);
+        
+        // Get field containers for UI updates
+        const contactCategoryField = document.getElementById('contact-category-' + transactionId);
+        const categoryField = document.getElementById('category-field-' + transactionId);
+        const sourceField = document.getElementById('source-field-' + transactionId);
+        const destField = document.getElementById('dest-field-' + transactionId);
+        const contactSelect = document.getElementById('contact-select-' + transactionId);
+        const categorySelect = document.getElementById('category-select-' + transactionId);
+        
+        if (predictedType === 'transfer') {
+            // Show transfer fields, hide contact/category
+            if (contactCategoryField) contactCategoryField.style.display = 'none';
+            if (categoryField) categoryField.style.display = 'none';
+            if (sourceField) sourceField.style.display = '';
+            if (destField) destField.style.display = '';
+            if (contactSelect) contactSelect.required = false;
+            if (categorySelect) categorySelect.required = false;
+            
+            // Populate transfer fields directly with the data we have
+            populateTransferFields(transactionId, data, amount);
+            
+            // Also populate payment methods for transfers
+            populatePaymentSelect(transactionId, data);
+            return;
+        } else {
+            // Show contact/category, hide transfer fields
+            if (contactCategoryField) contactCategoryField.style.display = '';
+            if (categoryField) categoryField.style.display = '';
+            if (sourceField) sourceField.style.display = 'none';
+            if (destField) destField.style.display = 'none';
+            if (contactSelect) contactSelect.required = true;
+            if (categorySelect) categorySelect.required = true;
+            
+            // Update contact label
+            const contactLabel = document.getElementById('contact-label-' + transactionId);
+            if (contactLabel) {
+                contactLabel.textContent = predictedType === 'expense' ? 'Vendor' : 'Customer';
+            }
+        }
+    }
     
     // Populate contacts (vendors for expense, customers for income)
     populateContactSelect(transactionId, data, selectedType);
@@ -1116,6 +1167,9 @@ function populateTransferFields(transactionId, data, amount) {
     const thisAccountName = '{{ akaunting_account_name ?? "" }}';
     const thisAccountCurrency = '{{ akaunting_account_currency ?? "TTD" }}';
     
+    // Get predicted destination account from suggested mapping
+    const predictedDestAccountId = data.suggested?.transfer_to_account_id || null;
+    
     // Positive amount = money coming IN, so destination is this account, source is dropdown
     // Negative amount = money going OUT, so source is this account, destination is dropdown
     const isPositive = amount >= 0;
@@ -1141,7 +1195,9 @@ function populateTransferFields(transactionId, data, amount) {
         accounts.forEach(acc => {
             if (acc.id !== thisAccountId) {
                 const opt = buildOption(acc);
-                sourceSelect.innerHTML += '<option value="' + acc.id + '" data-currency="' + opt.currency + '">' + opt.label + '</option>';
+                // Pre-select if this is the predicted source account (for positive/incoming transfers)
+                const selected = (predictedDestAccountId && acc.id == predictedDestAccountId) ? ' selected' : '';
+                sourceSelect.innerHTML += '<option value="' + acc.id + '" data-currency="' + opt.currency + '"' + selected + '>' + opt.label + '</option>';
             }
         });
     } else {
@@ -1155,7 +1211,9 @@ function populateTransferFields(transactionId, data, amount) {
         accounts.forEach(acc => {
             if (acc.id !== thisAccountId) {
                 const opt = buildOption(acc);
-                destSelect.innerHTML += '<option value="' + acc.id + '" data-currency="' + opt.currency + '">' + opt.label + '</option>';
+                // Pre-select if this is the predicted destination account
+                const selected = (predictedDestAccountId && acc.id == predictedDestAccountId) ? ' selected' : '';
+                destSelect.innerHTML += '<option value="' + acc.id + '" data-currency="' + opt.currency + '"' + selected + '>' + opt.label + '</option>';
             }
         });
     }
@@ -1165,6 +1223,11 @@ function populateTransferFields(transactionId, data, amount) {
     activeSelect.addEventListener('change', function() {
         checkTransferCurrencyMismatch(transactionId, sourceSelect, destSelect);
     });
+    
+    // If we pre-selected an account, check for currency mismatch
+    if (predictedDestAccountId) {
+        checkTransferCurrencyMismatch(transactionId, sourceSelect, destSelect);
+    }
 }
 
 // Check if source and destination currencies differ
@@ -1462,8 +1525,10 @@ function pushToAkaunting(transactionId, event) {
 
 // Cache for entities with installations
 let entitiesCache = null;
-// Cache for installation form data (keyed by installation_id)
+// Cache for installation form data (keyed by installation_id + description hash for uniqueness)
 let installationFormDataCache = {};
+// Cache for replication predictions (keyed by transactionId)
+let replicationPredictionCache = {};
 // Current entity's installation ID (for source mapping info)
 const sourceInstallationId = {{ batch.installation_id ?? 'null' }};
 
@@ -1474,38 +1539,77 @@ function toggleReplicateRow(transactionId) {
         const isHidden = row.style.display === 'none';
         row.style.display = isHidden ? '' : 'none';
         
-        // Load entities list on first open
+        // Load entities list and fetch prediction on first open
         if (isHidden) {
             loadEntitiesForReplicate(transactionId);
         }
     }
 }
 
-// Load entities with installations
+// Load entities with installations and fetch prediction
 function loadEntitiesForReplicate(transactionId) {
     const entitySelect = document.getElementById('replicate-entity-' + transactionId);
-    
-    // Use cache if available
-    if (entitiesCache) {
-        populateEntitySelect(transactionId, entitiesCache);
-        return;
-    }
+    const form = document.getElementById('replicate-form-' + transactionId);
+    const description = form ? form.dataset.description : '';
     
     entitySelect.innerHTML = '<option value="">Loading...</option>';
     
     // Exclude current entity from list
     const excludeEntity = {{ batch.entity_id ?? 'null' }};
-    let url = baseUrl + 'api/entities-with-installations';
-    if (excludeEntity) {
-        url += '?exclude_entity=' + excludeEntity;
-    }
     
-    fetch(url, { credentials: 'same-origin' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                entitiesCache = data.entities || [];
-                populateEntitySelect(transactionId, entitiesCache);
+    // Fetch entities and prediction in parallel
+    const entitiesPromise = entitiesCache 
+        ? Promise.resolve({ success: true, entities: entitiesCache })
+        : fetch(baseUrl + 'api/entities-with-installations' + (excludeEntity ? '?exclude_entity=' + excludeEntity : ''), { credentials: 'same-origin' })
+            .then(response => response.json());
+    
+    // Fetch prediction based on description (for immediate entity pre-selection)
+    const predictionPromise = (sourceInstallationId && description)
+        ? fetch(baseUrl + 'api/replication-prediction?source_installation_id=' + sourceInstallationId + '&description=' + encodeURIComponent(description), { credentials: 'same-origin' })
+            .then(response => response.json())
+            .catch(() => ({ success: true, has_prediction: false }))
+        : Promise.resolve({ success: true, has_prediction: false });
+    
+    Promise.all([entitiesPromise, predictionPromise])
+        .then(([entitiesData, predictionData]) => {
+            if (entitiesData.success) {
+                entitiesCache = entitiesData.entities || [];
+                
+                // Store prediction for later use when form data loads
+                if (predictionData.success && predictionData.has_prediction) {
+                    replicationPredictionCache[transactionId] = predictionData;
+                }
+                
+                // Populate entity select with prediction pre-selection
+                populateEntitySelect(transactionId, entitiesCache, predictionData);
+                
+                // If we have a prediction, pre-select type and auto-trigger entity change
+                if (predictionData.success && predictionData.has_prediction && predictionData.target_entity_id) {
+                    // Small delay to ensure DOM is updated
+                    setTimeout(() => {
+                        // Pre-select transaction type if predicted
+                        if (predictionData.transaction_type) {
+                            const typeSelect = document.getElementById('replicate-type-' + transactionId);
+                            if (typeSelect) {
+                                typeSelect.value = predictionData.transaction_type;
+                                // Update the contact label immediately
+                                const contactLabel = document.getElementById('replicate-contact-label-' + transactionId);
+                                if (contactLabel) {
+                                    contactLabel.textContent = predictionData.transaction_type === 'expense' ? 'Vendor' : 'Customer';
+                                }
+                            }
+                        }
+                        
+                        // Pre-select entity and trigger form data loading
+                        const selectedOption = Array.from(entitySelect.options).find(
+                            opt => opt.value == predictionData.target_entity_id
+                        );
+                        if (selectedOption) {
+                            entitySelect.value = predictionData.target_entity_id;
+                            onReplicateEntityChange(transactionId);
+                        }
+                    }, 50);
+                }
             } else {
                 entitySelect.innerHTML = '<option value="">Error loading</option>';
             }
@@ -1516,17 +1620,23 @@ function loadEntitiesForReplicate(transactionId) {
         });
 }
 
-// Populate entity select dropdown
-function populateEntitySelect(transactionId, entities) {
+// Populate entity select dropdown with optional prediction pre-selection
+function populateEntitySelect(transactionId, entities, prediction = null) {
     const entitySelect = document.getElementById('replicate-entity-' + transactionId);
     
     entitySelect.innerHTML = '<option value="">-- Select Entity --</option>';
+    
+    const predictedEntityId = (prediction && prediction.has_prediction) ? prediction.target_entity_id : null;
     
     entities.forEach(entity => {
         const option = document.createElement('option');
         option.value = entity.entity_id;
         option.textContent = entity.entity_name;
         option.dataset.installationId = entity.installation_id;
+        // Pre-select if this is the predicted entity
+        if (predictedEntityId && entity.entity_id == predictedEntityId) {
+            option.selected = true;
+        }
         entitySelect.appendChild(option);
     });
 }
@@ -1559,30 +1669,51 @@ function onReplicateEntityChange(transactionId) {
     categorySelect.innerHTML = '<option value="">Loading...</option>';
     paymentSelect.innerHTML = '<option value="">Loading...</option>';
     
-    // Get source vendor/category for mapping lookup
+    // Get source vendor/category for mapping lookup and description for predictive mapping
     const form = document.getElementById('replicate-form-' + transactionId);
     const sourceVendorId = form.querySelector('[name="source_vendor_id"]').value;
     const sourceCategoryId = form.querySelector('[name="source_category_id"]').value;
+    const description = form.dataset.description || '';
     
-    // Check cache first
-    if (installationFormDataCache[installationId]) {
-        populateReplicateFormSelects(transactionId, installationFormDataCache[installationId]);
+    // Create cache key that includes description for proper caching per transaction type
+    const cacheKey = installationId + '_' + (description ? description.substring(0, 50) : 'no_desc');
+    
+    // Check cache first (keyed by installation + description prefix)
+    if (installationFormDataCache[cacheKey]) {
+        populateReplicateFormSelects(transactionId, installationFormDataCache[cacheKey]);
         return;
     }
     
-    // Fetch form data for this installation
+    // Fetch form data for this installation with description for predictive mapping
     let url = baseUrl + 'api/installations/' + installationId + '/form-data';
+    const params = [];
     if (sourceInstallationId) {
-        url += '?source_installation_id=' + sourceInstallationId;
-        if (sourceVendorId) url += '&source_vendor_id=' + sourceVendorId;
-        if (sourceCategoryId) url += '&source_category_id=' + sourceCategoryId;
+        params.push('source_installation_id=' + sourceInstallationId);
+        if (sourceVendorId) params.push('source_vendor_id=' + sourceVendorId);
+        if (sourceCategoryId) params.push('source_category_id=' + sourceCategoryId);
+        if (description) params.push('description=' + encodeURIComponent(description));
+    }
+    if (params.length > 0) {
+        url += '?' + params.join('&');
     }
     
     fetch(url, { credentials: 'same-origin' })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                installationFormDataCache[installationId] = data;
+                // Merge with cached prediction if available (for fields not in form data response)
+                const cachedPrediction = replicationPredictionCache[transactionId];
+                if (cachedPrediction && cachedPrediction.has_prediction && !data.suggested) {
+                    data.suggested = {
+                        target_contact_id: cachedPrediction.target_contact_id,
+                        target_vendor_id: cachedPrediction.target_contact_id,
+                        target_category_id: cachedPrediction.target_category_id,
+                        target_account_id: cachedPrediction.target_account_id,
+                        target_payment_method: cachedPrediction.target_payment_method,
+                    };
+                }
+                
+                installationFormDataCache[cacheKey] = data;
                 populateReplicateFormSelects(transactionId, data);
             } else {
                 accountSelect.innerHTML = '<option value="">Error loading</option>';
@@ -1648,6 +1779,11 @@ function populateReplicateFormSelects(transactionId, data) {
         }
         paymentSelect.appendChild(option);
     });
+    
+    // Check for currency mismatch if account was pre-selected
+    if (suggested.target_account_id) {
+        checkReplicateCurrencyMismatch(transactionId);
+    }
 }
 
 // Populate contact select in replicate form
@@ -1661,7 +1797,8 @@ function populateReplicateContactSelect(transactionId, data, type, suggested) {
     
     contactSelect.innerHTML = '<option value="">-- Select ' + label + ' --</option>';
     
-    const suggestedId = suggested.target_vendor_id || null;
+    // Support both target_vendor_id (legacy) and target_contact_id (new replication mapping)
+    const suggestedId = suggested.target_vendor_id || suggested.target_contact_id || null;
     
     contacts.forEach(contact => {
         const option = document.createElement('option');
@@ -1781,6 +1918,8 @@ function onReplicateTypeChange(transactionId) {
     const selectedType = typeSelect.value;
     const installationInput = document.getElementById('replicate-installation-' + transactionId);
     const installationId = installationInput.value;
+    const form = document.getElementById('replicate-form-' + transactionId);
+    const description = form ? form.dataset.description || '' : '';
     
     // Update contact label
     const contactLabel = document.getElementById('replicate-contact-label-' + transactionId);
@@ -1788,9 +1927,12 @@ function onReplicateTypeChange(transactionId) {
         contactLabel.textContent = selectedType === 'expense' ? 'Vendor' : 'Customer';
     }
     
+    // Find cached data using the same cache key format as onReplicateEntityChange
+    const cacheKey = installationId + '_' + (description ? description.substring(0, 50) : 'no_desc');
+    
     // Re-populate contacts and categories with cached data
-    if (installationId && installationFormDataCache[installationId]) {
-        const data = installationFormDataCache[installationId];
+    if (installationId && installationFormDataCache[cacheKey]) {
+        const data = installationFormDataCache[cacheKey];
         populateReplicateContactSelect(transactionId, data, selectedType, data.suggested || {});
         populateReplicateCategorySelect(transactionId, data, selectedType, data.suggested || {});
     }

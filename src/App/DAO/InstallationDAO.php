@@ -263,5 +263,195 @@ class InstallationDAO
             ]);
         }
     }
+
+    // ============== Replication Transaction Mappings ==============
+
+    /**
+     * Extract a normalized pattern from description
+     * Uses first significant word/phrase for matching (same logic as VendorDAO)
+     */
+    private function extractPattern(string $description): string
+    {
+        // Normalize: uppercase, remove extra spaces
+        $pattern = strtoupper(trim($description));
+        
+        // Remove common prefixes
+        $prefixes = ['PAYPAL *', 'PAYPAL*', 'SQ *', 'SP ', 'TST*'];
+        foreach ($prefixes as $prefix) {
+            if (strpos($pattern, $prefix) === 0) {
+                $pattern = substr($pattern, strlen($prefix));
+                break;
+            }
+        }
+        
+        // Take first 2-3 significant words (up to 50 chars)
+        $words = preg_split('/\s+/', trim($pattern));
+        $significant = [];
+        $len = 0;
+        foreach ($words as $word) {
+            if ($len + strlen($word) > 50) break;
+            $significant[] = $word;
+            $len += strlen($word) + 1;
+            if (count($significant) >= 3) break;
+        }
+        
+        return implode(' ', $significant);
+    }
+
+    /**
+     * Find best replication mapping for a description across all target installations
+     * Returns the mapping with highest usage count
+     * Used for immediate entity pre-selection when opening replicate form
+     */
+    public function findBestReplicationMapping(int $sourceInstallationId, string $description): ?array
+    {
+        $pattern = $this->extractPattern($description);
+        
+        // Try exact pattern match first
+        $stmt = $this->db->prepare("
+            SELECT rtm.*, i.entity_id as target_entity_id, e.entity_name as target_entity_name
+            FROM replication_transaction_mappings rtm
+            JOIN akaunting_installations i ON rtm.target_installation_id = i.installation_id
+            LEFT JOIN entities e ON i.entity_id = e.entity_id
+            WHERE rtm.source_installation_id = :source_installation_id 
+            AND rtm.description_pattern = :pattern
+            ORDER BY rtm.usage_count DESC
+            LIMIT 1
+        ");
+        $stmt->execute([
+            'source_installation_id' => $sourceInstallationId,
+            'pattern' => $pattern
+        ]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($result) {
+            return $result;
+        }
+
+        // Try first word match as fallback
+        $firstWord = strtoupper(explode(' ', trim($description))[0] ?? '');
+        if (strlen($firstWord) >= 3) {
+            $stmt = $this->db->prepare("
+                SELECT rtm.*, i.entity_id as target_entity_id, e.entity_name as target_entity_name
+                FROM replication_transaction_mappings rtm
+                JOIN akaunting_installations i ON rtm.target_installation_id = i.installation_id
+                LEFT JOIN entities e ON i.entity_id = e.entity_id
+                WHERE rtm.source_installation_id = :source_installation_id 
+                AND rtm.description_pattern LIKE :pattern
+                ORDER BY rtm.usage_count DESC
+                LIMIT 1
+            ");
+            $stmt->execute([
+                'source_installation_id' => $sourceInstallationId,
+                'pattern' => $firstWord . '%'
+            ]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $result ?: null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Find replication mapping for a specific target installation
+     * Used when populating form after entity is selected
+     */
+    public function findReplicationMappingForTarget(
+        int $sourceInstallationId, 
+        int $targetInstallationId, 
+        string $description
+    ): ?array {
+        $pattern = $this->extractPattern($description);
+        
+        // Try exact pattern match first
+        $stmt = $this->db->prepare("
+            SELECT * FROM replication_transaction_mappings 
+            WHERE source_installation_id = :source_installation_id 
+            AND target_installation_id = :target_installation_id
+            AND description_pattern = :pattern
+        ");
+        $stmt->execute([
+            'source_installation_id' => $sourceInstallationId,
+            'target_installation_id' => $targetInstallationId,
+            'pattern' => $pattern
+        ]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($result) {
+            return $result;
+        }
+
+        // Try first word match as fallback
+        $firstWord = strtoupper(explode(' ', trim($description))[0] ?? '');
+        if (strlen($firstWord) >= 3) {
+            $stmt = $this->db->prepare("
+                SELECT * FROM replication_transaction_mappings 
+                WHERE source_installation_id = :source_installation_id 
+                AND target_installation_id = :target_installation_id
+                AND description_pattern LIKE :pattern
+                ORDER BY usage_count DESC
+                LIMIT 1
+            ");
+            $stmt->execute([
+                'source_installation_id' => $sourceInstallationId,
+                'target_installation_id' => $targetInstallationId,
+                'pattern' => $firstWord . '%'
+            ]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $result ?: null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Save or update replication transaction mapping
+     * Called after successful replication to learn from user choices
+     */
+    public function saveReplicationMapping(
+        int $sourceInstallationId,
+        int $targetInstallationId,
+        string $description,
+        ?string $transactionType,
+        ?int $targetContactId,
+        ?string $targetContactName,
+        ?int $targetCategoryId,
+        ?string $targetCategoryName,
+        ?int $targetAccountId,
+        ?string $targetPaymentMethod
+    ): bool {
+        $pattern = $this->extractPattern($description);
+        
+        $stmt = $this->db->prepare("
+            INSERT INTO replication_transaction_mappings 
+            (source_installation_id, target_installation_id, description_pattern, transaction_type,
+             target_contact_id, target_contact_name, target_category_id, target_category_name,
+             target_account_id, target_payment_method, usage_count)
+            VALUES 
+            (:source_installation_id, :target_installation_id, :pattern, :transaction_type,
+             :target_contact_id, :target_contact_name, :target_category_id, :target_category_name,
+             :target_account_id, :target_payment_method, 1)
+            ON DUPLICATE KEY UPDATE
+                transaction_type = COALESCE(VALUES(transaction_type), transaction_type),
+                target_contact_id = COALESCE(VALUES(target_contact_id), target_contact_id),
+                target_contact_name = COALESCE(VALUES(target_contact_name), target_contact_name),
+                target_category_id = COALESCE(VALUES(target_category_id), target_category_id),
+                target_category_name = COALESCE(VALUES(target_category_name), target_category_name),
+                target_account_id = COALESCE(VALUES(target_account_id), target_account_id),
+                target_payment_method = COALESCE(VALUES(target_payment_method), target_payment_method),
+                usage_count = usage_count + 1,
+                updated_at = NOW()
+        ");
+        return $stmt->execute([
+            'source_installation_id' => $sourceInstallationId,
+            'target_installation_id' => $targetInstallationId,
+            'pattern' => $pattern,
+            'transaction_type' => $transactionType,
+            'target_contact_id' => $targetContactId,
+            'target_contact_name' => $targetContactName,
+            'target_category_id' => $targetCategoryId,
+            'target_category_name' => $targetCategoryName,
+            'target_account_id' => $targetAccountId,
+            'target_payment_method' => $targetPaymentMethod,
+        ]);
+    }
 }
 

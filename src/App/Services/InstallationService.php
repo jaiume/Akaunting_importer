@@ -514,13 +514,15 @@ class InstallationService
     /**
      * Get form data for a specific installation (vendors, categories, payment methods, accounts)
      * Used for cross-entity replication
+     * @param string|null $description Transaction description for predictive mapping lookup
      */
     public function getFormDataForInstallation(
         int $installationId, 
         int $userId,
         ?int $sourceInstallationId = null,
         ?int $sourceVendorId = null,
-        ?int $sourceCategoryId = null
+        ?int $sourceCategoryId = null,
+        ?string $description = null
     ): array {
         $installation = $this->installationDAO->findByIdAndUser($installationId, $userId);
         
@@ -535,15 +537,42 @@ class InstallationService
         $paymentMethods = $this->fetchAkauntingPaymentMethods($installationId, $userId);
         $accounts = $this->fetchAkauntingAccounts($installationId, $userId);
 
-        // Look up suggested mapping if source info provided
+        // Look up suggested mapping - prefer description-based mapping, fall back to cross-entity mapping
         $suggested = null;
-        if ($sourceInstallationId && ($sourceVendorId || $sourceCategoryId)) {
-            $suggested = $this->getCrossEntityMapping(
+        
+        // First try description-based replication mapping (new predictive system)
+        if ($sourceInstallationId && $description) {
+            $replicationMapping = $this->getReplicationMappingForTarget(
+                $sourceInstallationId,
+                $installationId,
+                $description
+            );
+            if ($replicationMapping) {
+                $suggested = [
+                    'transaction_type' => $replicationMapping['transaction_type'],
+                    'target_contact_id' => $replicationMapping['target_contact_id'],
+                    'target_vendor_id' => $replicationMapping['target_contact_id'], // Alias for compatibility
+                    'target_category_id' => $replicationMapping['target_category_id'],
+                    'target_account_id' => $replicationMapping['target_account_id'],
+                    'target_payment_method' => $replicationMapping['target_payment_method'],
+                    'usage_count' => $replicationMapping['usage_count'],
+                    'source' => 'replication_mapping', // Indicate source for debugging
+                ];
+            }
+        }
+        
+        // Fall back to cross-entity mapping if no description-based match
+        if (!$suggested && $sourceInstallationId && ($sourceVendorId || $sourceCategoryId)) {
+            $crossMapping = $this->getCrossEntityMapping(
                 $sourceInstallationId,
                 $sourceVendorId,
                 $sourceCategoryId,
                 $installationId
             );
+            if ($crossMapping) {
+                $suggested = $crossMapping;
+                $suggested['source'] = 'cross_entity_mapping';
+            }
         }
 
         return [
@@ -593,6 +622,63 @@ class InstallationService
             $targetInstallationId,
             $targetVendorId,
             $targetCategoryId,
+            $targetAccountId,
+            $targetPaymentMethod
+        );
+    }
+
+    // ============== Replication Transaction Mappings ==============
+
+    /**
+     * Get best replication mapping prediction based on description
+     * Returns the best match across all target installations (for immediate entity pre-selection)
+     */
+    public function getBestReplicationPrediction(int $sourceInstallationId, string $description): ?array
+    {
+        return $this->installationDAO->findBestReplicationMapping($sourceInstallationId, $description);
+    }
+
+    /**
+     * Get replication mapping for a specific target installation
+     * Used when populating form fields after entity is selected
+     */
+    public function getReplicationMappingForTarget(
+        int $sourceInstallationId,
+        int $targetInstallationId,
+        string $description
+    ): ?array {
+        return $this->installationDAO->findReplicationMappingForTarget(
+            $sourceInstallationId,
+            $targetInstallationId,
+            $description
+        );
+    }
+
+    /**
+     * Save replication transaction mapping
+     * Called after successful replication to learn from user choices
+     */
+    public function saveReplicationMapping(
+        int $sourceInstallationId,
+        int $targetInstallationId,
+        string $description,
+        ?string $transactionType,
+        ?int $targetContactId,
+        ?string $targetContactName,
+        ?int $targetCategoryId,
+        ?string $targetCategoryName,
+        ?int $targetAccountId,
+        ?string $targetPaymentMethod
+    ): bool {
+        return $this->installationDAO->saveReplicationMapping(
+            $sourceInstallationId,
+            $targetInstallationId,
+            $description,
+            $transactionType,
+            $targetContactId,
+            $targetContactName,
+            $targetCategoryId,
+            $targetCategoryName,
             $targetAccountId,
             $targetPaymentMethod
         );

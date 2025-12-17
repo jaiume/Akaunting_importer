@@ -156,6 +156,7 @@ class ApiController extends BaseController
 
     /**
      * Get form data for a specific installation (vendors, categories, payment methods, accounts)
+     * Now also accepts description parameter for predictive replication mapping
      */
     public function getInstallationFormData(Request $request, Response $response): Response
     {
@@ -167,6 +168,9 @@ class ApiController extends BaseController
         $sourceVendorId = isset($queryParams['source_vendor_id']) ? (int)$queryParams['source_vendor_id'] : null;
         $sourceCategoryId = isset($queryParams['source_category_id']) ? (int)$queryParams['source_category_id'] : null;
         $sourceInstallationId = isset($queryParams['source_installation_id']) ? (int)$queryParams['source_installation_id'] : null;
+        
+        // Transaction description for predictive replication mapping
+        $description = isset($queryParams['description']) ? trim($queryParams['description']) : null;
 
         try {
             $formData = $this->installationService->getFormDataForInstallation(
@@ -174,9 +178,63 @@ class ApiController extends BaseController
                 $user['user_id'],
                 $sourceInstallationId,
                 $sourceVendorId,
-                $sourceCategoryId
+                $sourceCategoryId,
+                $description
             );
             return $this->json($response, array_merge(['success' => true], $formData));
+        } catch (\Exception $e) {
+            return $this->json($response, ['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get replication prediction based on transaction description
+     * Returns the best target entity/installation and field values for immediate pre-selection
+     */
+    public function getReplicationPrediction(Request $request, Response $response): Response
+    {
+        $user = $this->getUser($request);
+        $queryParams = $this->getQueryParams($request);
+        
+        $sourceInstallationId = isset($queryParams['source_installation_id']) ? (int)$queryParams['source_installation_id'] : null;
+        $description = isset($queryParams['description']) ? trim($queryParams['description']) : null;
+
+        if (!$sourceInstallationId || !$description) {
+            return $this->json($response, [
+                'success' => true,
+                'has_prediction' => false,
+                'message' => 'Missing source_installation_id or description'
+            ]);
+        }
+
+        try {
+            $prediction = $this->installationService->getBestReplicationPrediction(
+                $sourceInstallationId,
+                $description
+            );
+
+            if ($prediction) {
+                return $this->json($response, [
+                    'success' => true,
+                    'has_prediction' => true,
+                    'target_installation_id' => $prediction['target_installation_id'],
+                    'target_entity_id' => $prediction['target_entity_id'],
+                    'target_entity_name' => $prediction['target_entity_name'],
+                    'transaction_type' => $prediction['transaction_type'],
+                    'target_contact_id' => $prediction['target_contact_id'],
+                    'target_contact_name' => $prediction['target_contact_name'],
+                    'target_category_id' => $prediction['target_category_id'],
+                    'target_category_name' => $prediction['target_category_name'],
+                    'target_account_id' => $prediction['target_account_id'],
+                    'target_payment_method' => $prediction['target_payment_method'],
+                    'usage_count' => $prediction['usage_count'],
+                ]);
+            }
+
+            return $this->json($response, [
+                'success' => true,
+                'has_prediction' => false,
+            ]);
         } catch (\Exception $e) {
             return $this->json($response, ['success' => false, 'error' => $e->getMessage()], 500);
         }

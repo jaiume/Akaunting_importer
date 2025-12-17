@@ -319,42 +319,48 @@ class VendorDAO
     }
 
     /**
-     * Create or update a transaction mapping (vendor + category + payment method)
+     * Create or update a transaction mapping (type + vendor + category + payment method + transfer account)
      */
     public function saveTransactionMapping(
         int $installationId, 
-        string $descriptionPattern, 
+        string $descriptionPattern,
+        ?string $transactionType,
         ?int $contactId, 
         ?string $contactName,
         ?int $categoryId,
         ?string $categoryName,
-        ?string $paymentMethod
+        ?string $paymentMethod,
+        ?int $transferToAccountId = null
     ): bool {
         $pattern = $this->extractPattern($descriptionPattern);
         
         $stmt = $this->db->prepare("
             INSERT INTO transaction_mappings 
-            (installation_id, description_pattern, akaunting_contact_id, contact_name, 
-             akaunting_category_id, category_name, payment_method, usage_count)
-            VALUES (:installation_id, :pattern, :contact_id, :contact_name, 
-                    :category_id, :category_name, :payment_method, 1)
+            (installation_id, description_pattern, transaction_type, akaunting_contact_id, contact_name, 
+             akaunting_category_id, category_name, payment_method, transfer_to_account_id, usage_count)
+            VALUES (:installation_id, :pattern, :transaction_type, :contact_id, :contact_name, 
+                    :category_id, :category_name, :payment_method, :transfer_to_account_id, 1)
             ON DUPLICATE KEY UPDATE
+                transaction_type = COALESCE(VALUES(transaction_type), transaction_type),
                 akaunting_contact_id = COALESCE(VALUES(akaunting_contact_id), akaunting_contact_id),
                 contact_name = COALESCE(VALUES(contact_name), contact_name),
                 akaunting_category_id = COALESCE(VALUES(akaunting_category_id), akaunting_category_id),
                 category_name = COALESCE(VALUES(category_name), category_name),
                 payment_method = COALESCE(VALUES(payment_method), payment_method),
+                transfer_to_account_id = COALESCE(VALUES(transfer_to_account_id), transfer_to_account_id),
                 usage_count = usage_count + 1,
                 updated_at = NOW()
         ");
         return $stmt->execute([
             'installation_id' => $installationId,
             'pattern' => $pattern,
+            'transaction_type' => $transactionType,
             'contact_id' => $contactId,
             'contact_name' => $contactName,
             'category_id' => $categoryId,
             'category_name' => $categoryName,
-            'payment_method' => $paymentMethod
+            'payment_method' => $paymentMethod,
+            'transfer_to_account_id' => $transferToAccountId
         ]);
     }
 

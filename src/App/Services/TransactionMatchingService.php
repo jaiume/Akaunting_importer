@@ -1056,17 +1056,19 @@ class TransactionMatchingService
             // Update push status with transaction number and timestamp
             $this->transactionDAO->updatePushStatus($transactionId, $transactionNumber);
             
-            // Save transaction mapping for future auto-suggestion (vendor + category + payment method)
+            // Save transaction mapping for future auto-suggestion (type + vendor + category + payment method)
             if ($vendorDAO && !empty($txn['description'])) {
                 try {
                     $vendorDAO->saveTransactionMapping(
                         $installation['installation_id'],
                         $txn['description'],
+                        $type, // transaction type (income/expense)
                         $contactId,
                         $contact ?: null,
                         $categoryId,
                         $categoryName,
-                        $paymentMethod
+                        $paymentMethod,
+                        null // no transfer account for income/expense
                     );
                 } catch (\Exception $e) {
                     // Don't fail the whole operation if mapping save fails
@@ -1087,6 +1089,7 @@ class TransactionMatchingService
      * Push a transfer to Akaunting
      * @param float|null $toAmount Amount in destination currency (for multi-currency transfers)
      * @param float|null $currencyRate Exchange rate from source to destination currency
+     * @param \App\DAO\VendorDAO|null $vendorDAO Optional VendorDAO for saving transaction mapping
      */
     public function pushTransferToAkaunting(
         int $batchId,
@@ -1098,7 +1101,8 @@ class TransactionMatchingService
         int $toAccountId,
         string $paymentMethod,
         ?float $toAmount = null,
-        ?float $currencyRate = null
+        ?float $currencyRate = null,
+        ?\App\DAO\VendorDAO $vendorDAO = null
     ): array {
         // Get batch and installation info
         $batch = $this->batchDAO->findById($batchId);
@@ -1208,6 +1212,26 @@ class TransactionMatchingService
             
             // Update push status with transfer number and timestamp
             $this->transactionDAO->updatePushStatus($transactionId, $transferNumber);
+            
+            // Save transaction mapping for future auto-suggestion (transfer type + destination account)
+            if ($vendorDAO && !empty($txn['description'])) {
+                try {
+                    $vendorDAO->saveTransactionMapping(
+                        $installation['installation_id'],
+                        $txn['description'],
+                        'transfer', // transaction type
+                        null, // no contact for transfers
+                        null,
+                        null, // no category for transfers
+                        null,
+                        $paymentMethod,
+                        $toAccountId // destination account for transfer
+                    );
+                } catch (\Exception $e) {
+                    // Don't fail the whole operation if mapping save fails
+                    error_log('Failed to save transfer mapping: ' . $e->getMessage());
+                }
+            }
         }
 
         return [

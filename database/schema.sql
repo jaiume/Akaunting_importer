@@ -246,11 +246,13 @@ CREATE TABLE IF NOT EXISTS `transaction_mappings` (
   `mapping_id` int(11) NOT NULL AUTO_INCREMENT,
   `installation_id` int(11) NOT NULL,
   `description_pattern` varchar(255) NOT NULL COMMENT 'Pattern from imported transaction description',
+  `transaction_type` enum('income','expense','transfer') DEFAULT NULL COMMENT 'Transaction type (income, expense, or transfer)',
   `akaunting_contact_id` int(11) DEFAULT NULL COMMENT 'Mapped Akaunting contact ID',
   `contact_name` varchar(255) DEFAULT NULL COMMENT 'Cached contact name for display',
   `akaunting_category_id` int(11) DEFAULT NULL COMMENT 'Mapped Akaunting category ID',
   `category_name` varchar(255) DEFAULT NULL COMMENT 'Cached category name for display',
   `payment_method` varchar(50) DEFAULT NULL COMMENT 'Payment method code',
+  `transfer_to_account_id` int(11) DEFAULT NULL COMMENT 'For transfers: the destination Akaunting account ID',
   `usage_count` int(11) DEFAULT 1 COMMENT 'How many times this mapping has been used',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -330,4 +332,32 @@ CREATE TABLE IF NOT EXISTS `cross_entity_mappings` (
   KEY `usage_count` (`usage_count`),
   CONSTRAINT `cross_entity_mappings_source_fk` FOREIGN KEY (`source_installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE,
   CONSTRAINT `cross_entity_mappings_target_fk` FOREIGN KEY (`target_installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Replication transaction mappings table
+-- Maps transaction description patterns to target installation settings for predictive replication
+-- Similar to transaction_mappings but for cross-entity replication based on description
+CREATE TABLE IF NOT EXISTS `replication_transaction_mappings` (
+  `mapping_id` int(11) NOT NULL AUTO_INCREMENT,
+  `source_installation_id` int(11) NOT NULL COMMENT 'Source installation where transaction originates',
+  `target_installation_id` int(11) NOT NULL COMMENT 'Target installation for replication',
+  `description_pattern` varchar(255) NOT NULL COMMENT 'Pattern from transaction description',
+  `transaction_type` enum('income','expense') DEFAULT NULL COMMENT 'Transaction type (income or expense)',
+  `target_contact_id` int(11) DEFAULT NULL COMMENT 'Target vendor/customer ID',
+  `target_contact_name` varchar(255) DEFAULT NULL COMMENT 'Cached contact name',
+  `target_category_id` int(11) DEFAULT NULL COMMENT 'Target category ID',
+  `target_category_name` varchar(255) DEFAULT NULL COMMENT 'Cached category name',
+  `target_account_id` int(11) DEFAULT NULL COMMENT 'Target Akaunting account ID',
+  `target_payment_method` varchar(100) DEFAULT NULL COMMENT 'Target payment method code',
+  `usage_count` int(11) DEFAULT 1 COMMENT 'How many times this mapping has been used',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`mapping_id`),
+  UNIQUE KEY `unique_pattern_mapping` (`source_installation_id`, `target_installation_id`, `description_pattern`),
+  KEY `source_installation_id` (`source_installation_id`),
+  KEY `target_installation_id` (`target_installation_id`),
+  KEY `description_pattern` (`description_pattern`),
+  KEY `usage_count` (`usage_count`),
+  CONSTRAINT `replication_mappings_source_fk` FOREIGN KEY (`source_installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE,
+  CONSTRAINT `replication_mappings_target_fk` FOREIGN KEY (`target_installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
