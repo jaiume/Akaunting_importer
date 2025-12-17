@@ -134,6 +134,28 @@
         color: #212529;
         font-size: 0.7rem;
     }
+    /* Highlighted transaction (just pushed/replicated) */
+    .transaction-row.highlighted td {
+        animation: highlightPulse 2s ease-in-out;
+    }
+    .highlight-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background-color: #dc3545;
+        border-radius: 50%;
+        margin-right: 6px;
+        animation: indicatorPulse 1.5s ease-in-out infinite;
+    }
+    @keyframes highlightPulse {
+        0% { background-color: rgba(25, 135, 84, 0.4); }
+        50% { background-color: rgba(25, 135, 84, 0.2); }
+        100% { background-color: transparent; }
+    }
+    @keyframes indicatorPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.2); }
+    }
 </style>
 {% endblock %}
 
@@ -396,7 +418,7 @@
                             {# Regular imported transaction row #}
                             {% set txn = item %}
                             {% set is_pushed = txn.status == 'processed' %}
-                            <tr class="transaction-row {{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}{% if is_pushed %} has-pushed{% endif %}">
+                            <tr class="transaction-row {{ row_class }}{% if txn.matched_akaunting_id %} has-match{% endif %}{% if is_pushed %} has-pushed{% endif %}" id="txn-{{ txn.transaction_id }}">
                                 <td>{{ txn.transaction_date }}</td>
                                 <td>{{ txn.bank_ref ?: '-' }}</td>
                                 <td>{{ txn.description }}</td>
@@ -742,15 +764,56 @@ const batchId = {{ batch.batch_id }};
 const baseUrl = '{{ base_url }}';
 let isMatching = false;
 
-// Check URL for filter state on page load
+// Check URL for filter state and highlight on page load
 document.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
+    
+    // Handle filter state
     const filterValue = urlParams.get('filter');
     if (filterValue) {
         const filterSelect = document.getElementById('transactionFilter');
         if (filterSelect) {
             filterSelect.value = filterValue;
             applyTransactionFilter();
+        }
+    }
+    
+    // Handle highlight (scroll to and highlight recently pushed/replicated transaction)
+    const highlightId = urlParams.get('highlight');
+    if (highlightId) {
+        const txnRow = document.getElementById('txn-' + highlightId);
+        if (txnRow) {
+            // Scroll to the transaction row with some offset from top
+            setTimeout(() => {
+                txnRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+            
+            // Add highlight class for animation
+            txnRow.classList.add('highlighted');
+            
+            // Add pulsing indicator to the first cell
+            const firstCell = txnRow.querySelector('td');
+            if (firstCell) {
+                const indicator = document.createElement('span');
+                indicator.className = 'highlight-indicator';
+                indicator.title = 'Just processed';
+                firstCell.insertBefore(indicator, firstCell.firstChild);
+                
+                // Remove indicator after 10 seconds
+                setTimeout(() => {
+                    indicator.remove();
+                }, 10000);
+            }
+            
+            // Remove highlight class after animation completes
+            setTimeout(() => {
+                txnRow.classList.remove('highlighted');
+            }, 2000);
+            
+            // Clean up URL (remove highlight param) without reload
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.delete('highlight');
+            window.history.replaceState({}, '', newUrl);
         }
     }
 });
@@ -1502,8 +1565,8 @@ function pushToAkaunting(transactionId, event) {
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            // Success - reload page to show updated status, preserving filter state
-            window.location.href = baseUrl + 'import/batch/' + batchId + '?success=' + encodeURIComponent('Transaction pushed to Akaunting') + getFilterParams();
+            // Success - reload page to show updated status, preserving filter state and highlighting the transaction
+            window.location.href = baseUrl + 'import/batch/' + batchId + '?success=' + encodeURIComponent('Transaction pushed to Akaunting') + '&highlight=' + transactionId + getFilterParams();
         } else {
             alert('Error: ' + (result.message || 'Failed to push transaction'));
             submitBtn.disabled = false;
@@ -2016,10 +2079,8 @@ function replicateToEntity(transactionId, event) {
     .then(response => response.json())
     .then(result => {
         if (result.success) {
-            // Success - just close the row, no dialog needed
-            toggleReplicateRow(transactionId);
-            // Optionally reload to show updated status
-            window.location.reload();
+            // Success - reload page to show updated status, preserving filter state and highlighting the transaction
+            window.location.href = baseUrl + 'import/batch/' + batchId + '?success=' + encodeURIComponent('Transaction replicated successfully') + '&highlight=' + transactionId + getFilterParams();
         } else {
             alert('Error: ' + (result.message || 'Failed to replicate transaction'));
             submitBtn.disabled = false;
