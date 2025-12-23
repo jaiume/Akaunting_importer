@@ -14,6 +14,7 @@ use App\Controllers\InstallationController;
 use App\Controllers\ImportController;
 use App\Controllers\ApiController;
 use App\Controllers\ReconciliationController;
+use App\Controllers\ReportController;
 
 // Middleware
 use App\Middleware\AuthenticationMiddleware;
@@ -101,6 +102,10 @@ return function (App $app) {
         $group->get('/reconciliation/account/{account_id}', [ReconciliationController::class, 'showAccountReconciliation']);
         $group->post('/reconciliation/account/{account_id}/fetch', [ReconciliationController::class, 'fetchProgress']);
         $group->post('/reconciliation/account/{account_id}/reconcile', [ReconciliationController::class, 'reconcile']);
+        
+        // Reports
+        $group->get('/reports/income-expenses', [ReportController::class, 'index']);
+        $group->post('/reports/income-expenses/generate', [ReportController::class, 'generate']);
         
     })->add($authMiddleware);
 

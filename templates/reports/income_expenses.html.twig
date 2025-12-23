@@ -1,0 +1,567 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Income & Expenses Report - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .report-card {
+        border: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Print styles */
+    @media print {
+        /* Hide non-essential elements */
+        .navbar, .footer, .no-print, form, .btn, h1.mb-4 {
+            display: none !important;
+        }
+        
+        /* Reset page layout */
+        body {
+            font-size: 11pt !important;
+            line-height: 1.4 !important;
+        }
+        
+        .main-content {
+            padding: 0 !important;
+        }
+        
+        .container {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        
+        /* Report card styling */
+        .report-card {
+            box-shadow: none !important;
+            border: none !important;
+        }
+        
+        .card-body {
+            padding: 0 !important;
+        }
+        
+        /* Header styling for print */
+        .report-header {
+            background: #333 !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            padding: 12px 16px !important;
+            margin-bottom: 20px !important;
+            border-radius: 0 !important;
+        }
+        
+        .report-header h4 {
+            font-size: 14pt !important;
+            margin-bottom: 4px !important;
+        }
+        
+        .report-header p {
+            font-size: 11pt !important;
+        }
+        
+        /* Force single column layout for print */
+        .row {
+            display: block !important;
+        }
+        
+        .col-lg-6 {
+            width: 100% !important;
+            max-width: 100% !important;
+            flex: none !important;
+            padding: 0 !important;
+        }
+        
+        /* Income section - print first */
+        .income-section {
+            background: #f0fff4 !important;
+            border-left: 4px solid #10b981 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            padding: 12px !important;
+            margin-bottom: 20px !important;
+            page-break-inside: avoid !important;
+        }
+        
+        .income-section h5 {
+            font-size: 13pt !important;
+            margin-bottom: 10px !important;
+            border-bottom: 1px solid #10b981;
+            padding-bottom: 6px;
+        }
+        
+        .income-section table {
+            width: 100% !important;
+            font-size: 10pt !important;
+        }
+        
+        .income-section th, .income-section td {
+            padding: 4px 8px !important;
+        }
+        
+        /* Expense section - print second */
+        .expense-section {
+            background: #fff5f5 !important;
+            border-left: 4px solid #ef4444 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            padding: 12px !important;
+            margin-bottom: 20px !important;
+        }
+        
+        .expense-section h5 {
+            font-size: 13pt !important;
+            margin-bottom: 10px !important;
+            border-bottom: 1px solid #ef4444;
+            padding-bottom: 6px;
+        }
+        
+        /* Accordion - expand all and flatten for print */
+        .accordion {
+            border: none !important;
+        }
+        
+        .accordion-item {
+            border: none !important;
+            margin-bottom: 8px !important;
+            page-break-inside: avoid !important;
+        }
+        
+        .accordion-collapse {
+            display: block !important;
+            height: auto !important;
+        }
+        
+        .accordion-button {
+            padding: 6px 0 !important;
+            background: transparent !important;
+            border-bottom: 1px solid #ddd !important;
+            font-size: 11pt !important;
+            font-weight: 600 !important;
+        }
+        
+        .accordion-button::after {
+            display: none !important;
+        }
+        
+        .accordion-body {
+            padding: 4px 0 4px 16px !important;
+        }
+        
+        .accordion-body table {
+            font-size: 10pt !important;
+        }
+        
+        .account-row td {
+            padding: 2px 8px !important;
+        }
+        
+        /* Totals styling */
+        .grand-total-row {
+            background: #e5e5e5 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            font-size: 11pt !important;
+            padding: 8px !important;
+            margin-top: 12px !important;
+        }
+        
+        /* Net income section */
+        .net-income-positive, .net-income-negative {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            padding: 16px !important;
+            margin-top: 20px !important;
+            page-break-inside: avoid !important;
+        }
+        
+        .net-income-positive {
+            background: #d1fae5 !important;
+            border: 2px solid #10b981 !important;
+        }
+        
+        .net-income-negative {
+            background: #fee2e2 !important;
+            border: 2px solid #ef4444 !important;
+        }
+        
+        .net-income-positive h4, .net-income-negative h4 {
+            font-size: 12pt !important;
+        }
+        
+        .net-income-positive h2, .net-income-negative h2 {
+            font-size: 18pt !important;
+        }
+        
+        /* Amount cells */
+        .amount-cell {
+            text-align: right !important;
+        }
+        
+        /* Warning banner */
+        .warning-banner {
+            display: none !important;
+        }
+    }
+    
+    .report-header {
+        background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 0.5rem 0.5rem 0 0;
+    }
+    
+    .income-section {
+        background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+        border-left: 4px solid #10b981;
+    }
+    
+    .expense-section {
+        background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+        border-left: 4px solid #ef4444;
+    }
+    
+    .category-header {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .category-header:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    
+    .account-row {
+        background-color: rgba(255,255,255,0.7);
+        font-size: 0.9rem;
+    }
+    
+    .total-row {
+        font-weight: bold;
+        background-color: rgba(0,0,0,0.05);
+    }
+    
+    .grand-total-row {
+        font-weight: bold;
+        font-size: 1.1rem;
+        background-color: rgba(0,0,0,0.1);
+    }
+    
+    .amount-cell {
+        text-align: right;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    }
+    
+    .income-amount {
+        color: #059669;
+    }
+    
+    .expense-amount {
+        color: #dc2626;
+    }
+    
+    .collapse-icon {
+        transition: transform 0.2s;
+    }
+    
+    .collapsed .collapse-icon {
+        transform: rotate(-90deg);
+    }
+    
+    .warning-banner {
+        background-color: #fef3c7;
+        border-left: 4px solid #f59e0b;
+    }
+    
+    .net-income-positive {
+        color: #059669;
+        background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+    }
+    
+    .net-income-negative {
+        color: #dc2626;
+        background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-graph-up"></i> Income & Expenses Report
+        </h1>
+        
+        {% if errors is defined and errors %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            <ul class="mb-0">
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        
+        <!-- Report Form -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-sliders"></i> Report Parameters</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ base_url }}reports/income-expenses/generate">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label for="installation_id" class="form-label">Akaunting Installation</label>
+                            <select class="form-select" id="installation_id" name="installation_id" required>
+                                <option value="">Select installation...</option>
+                                {% for installation in installations %}
+                                <option value="{{ installation.installation_id }}" 
+                                        {% if selected_installation is defined and selected_installation == installation.installation_id %}selected{% endif %}>
+                                    {{ installation.name }}
+                                    {% if installation.entity_name %}({{ installation.entity_name }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <label for="month" class="form-label">Month</label>
+                            <select class="form-select" id="month" name="month" required>
+                                {% for num, name in months %}
+                                <option value="{{ num }}" 
+                                        {% if selected_month is defined %}
+                                            {% if selected_month == num %}selected{% endif %}
+                                        {% elseif current_month == num %}selected{% endif %}>
+                                    {{ name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-2">
+                            <label for="year" class="form-label">Year</label>
+                            <select class="form-select" id="year" name="year" required>
+                                {% for y in years|reverse %}
+                                <option value="{{ y }}" 
+                                        {% if selected_year is defined %}
+                                            {% if selected_year == y %}selected{% endif %}
+                                        {% elseif current_year == y %}selected{% endif %}>
+                                    {{ y }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-file-earmark-bar-graph"></i> Generate Report
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        {% if report is defined and report %}
+        <!-- Report Results -->
+        <div class="card report-card mb-4">
+            <div class="report-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-1">
+                            <i class="bi bi-building"></i> {{ report.installation.name }}
+                        </h4>
+                        <p class="mb-0 opacity-75">
+                            <i class="bi bi-calendar3"></i> {{ report.period.month_name }} {{ report.period.year }}
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <small class="opacity-75 d-block mb-2">
+                            {{ report.fetch_info.total_transactions }} transactions
+                            {% if report.fetch_info.truncated %}
+                            <span class="badge bg-warning text-dark ms-1">Truncated</span>
+                            {% endif %}
+                        </small>
+                        <button type="button" class="btn btn-light btn-sm no-print" onclick="window.print()">
+                            <i class="bi bi-printer"></i> Print Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            {% if report.fetch_info.warnings is defined and report.fetch_info.warnings|length > 0 %}
+            <div class="warning-banner p-3">
+                <strong><i class="bi bi-exclamation-triangle"></i> Warnings:</strong>
+                <ul class="mb-0 mt-1">
+                    {% for warning in report.fetch_info.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            <div class="card-body">
+                <div class="row">
+                    <!-- Income Section -->
+                    <div class="col-lg-6 mb-4">
+                        <div class="income-section rounded p-3 h-100">
+                            <h5 class="mb-3">
+                                <i class="bi bi-arrow-down-circle text-success"></i> Income
+                            </h5>
+                            
+                            {% if report.income.categories|length > 0 %}
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="amount-cell" style="width: 120px;">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for category in report.income.categories %}
+                                    <tr>
+                                        <td>{{ category.name }}</td>
+                                        <td class="amount-cell income-amount">
+                                            {{ category.total|number_format(2) }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="grand-total-row">
+                                        <td><strong>Total Income</strong></td>
+                                        <td class="amount-cell income-amount">
+                                            <strong>{{ report.income.total|number_format(2) }}</strong>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            {% else %}
+                            <p class="text-muted mb-0">
+                                <i class="bi bi-info-circle"></i> No income recorded for this period.
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Expenses Section -->
+                    <div class="col-lg-6 mb-4">
+                        <div class="expense-section rounded p-3 h-100">
+                            <h5 class="mb-3">
+                                <i class="bi bi-arrow-up-circle text-danger"></i> Expenses
+                            </h5>
+                            
+                            {% if report.expenses.categories|length > 0 %}
+                            <div class="accordion" id="expensesAccordion">
+                                {% for category in report.expenses.categories %}
+                                <div class="accordion-item border-0 mb-2">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed category-header py-2" 
+                                                type="button" 
+                                                data-bs-toggle="collapse" 
+                                                data-bs-target="#category-{{ loop.index }}"
+                                                aria-expanded="false">
+                                            <div class="d-flex justify-content-between w-100 pe-3">
+                                                <span>{{ category.name }}</span>
+                                                <span class="expense-amount">{{ category.total|number_format(2) }}</span>
+                                            </div>
+                                        </button>
+                                    </h2>
+                                    <div id="category-{{ loop.index }}" 
+                                         class="accordion-collapse collapse" 
+                                         data-bs-parent="#expensesAccordion">
+                                        <div class="accordion-body py-2 px-3">
+                                            <table class="table table-sm table-borderless mb-0">
+                                                <tbody>
+                                                    {% for account in category.accounts %}
+                                                    <tr class="account-row">
+                                                        <td class="ps-3">
+                                                            <i class="bi bi-wallet2 text-muted"></i>
+                                                            {{ account.name }}
+                                                        </td>
+                                                        <td class="amount-cell expense-amount" style="width: 100px;">
+                                                            {{ account.total|number_format(2) }}
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="grand-total-row p-2 rounded mt-3">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Total Expenses</strong>
+                                    <strong class="expense-amount">{{ report.expenses.total|number_format(2) }}</strong>
+                                </div>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0">
+                                <i class="bi bi-info-circle"></i> No expenses recorded for this period.
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Net Income Summary -->
+                <div class="row">
+                    <div class="col-12">
+                        {% set net_income = report.income.total - report.expenses.total %}
+                        <div class="p-4 rounded text-center {% if net_income >= 0 %}net-income-positive{% else %}net-income-negative{% endif %}">
+                            <h4 class="mb-1">Net Income</h4>
+                            <h2 class="mb-0">
+                                {% if net_income >= 0 %}
+                                <i class="bi bi-graph-up-arrow"></i>
+                                {% else %}
+                                <i class="bi bi-graph-down-arrow"></i>
+                                {% endif %}
+                                {{ net_income|number_format(2) }}
+                            </h2>
+                            <small class="opacity-75">
+                                Income ({{ report.income.total|number_format(2) }}) - Expenses ({{ report.expenses.total|number_format(2) }})
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% elseif not errors is defined or errors|length == 0 %}
+        <!-- Initial state - no report generated yet -->
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-file-earmark-bar-graph fs-1 text-muted"></i>
+                <p class="text-muted mt-3 mb-0">
+                    Select an installation and month, then click "Generate Report" to view income and expenses.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-expand all expense categories if there are few of them
+document.addEventListener('DOMContentLoaded', function() {
+    const accordionItems = document.querySelectorAll('#expensesAccordion .accordion-item');
+    if (accordionItems.length <= 5) {
+        accordionItems.forEach(function(item) {
+            const collapse = item.querySelector('.accordion-collapse');
+            const button = item.querySelector('.accordion-button');
+            if (collapse && button) {
+                collapse.classList.add('show');
+                button.classList.remove('collapsed');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+

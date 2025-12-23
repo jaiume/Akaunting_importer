@@ -15,6 +15,7 @@ use App\Services\ImportService;
 use App\Services\InstallationService;
 use App\Services\AccountLinkService;
 use App\Services\TransactionMatchingService;
+use App\Services\ReportService;
 
 // DAOs
 use App\DAO\EntityDAO;
@@ -36,6 +37,7 @@ use App\Controllers\InstallationController;
 use App\Controllers\ImportController;
 use App\Controllers\ApiController;
 use App\Controllers\ReconciliationController;
+use App\Controllers\ReportController;
 
 // Middleware
 use App\Middleware\AuthenticationMiddleware;
@@ -188,6 +190,13 @@ $containerBuilder->addDefinitions([
         );
     },
     
+    ReportService::class => function (ContainerInterface $c) {
+        return new ReportService(
+            $c->get(InstallationDAO::class),
+            $c->get(InstallationService::class)
+        );
+    },
+    
     // ===================
     // Middleware
     // ===================
@@ -274,6 +283,14 @@ $containerBuilder->addDefinitions([
             $c->get(TransactionMatchingService::class),
             $c->get(EntityService::class),
             $c->get(AccountDAO::class)
+        );
+    },
+    
+    ReportController::class => function (ContainerInterface $c) {
+        return new ReportController(
+            $c->get('view'),
+            $c->get(ReportService::class),
+            $c->get(InstallationService::class)
         );
     },
 ]);
