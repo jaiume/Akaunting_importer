@@ -9,11 +9,21 @@
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
     
+    /* Screen/Print visibility helpers */
+    .print-only {
+        display: none !important;
+    }
+    
     /* Print styles */
     @media print {
         /* Hide non-essential elements */
-        .navbar, .footer, .no-print, form, .btn, h1.mb-4 {
+        .navbar, .footer, .no-print, form, .btn, h1.mb-4, .screen-only {
             display: none !important;
+        }
+        
+        /* Show print-only elements */
+        .print-only {
+            display: table !important;
         }
         
         /* Reset page layout */
@@ -117,44 +127,14 @@
             padding-bottom: 6px;
         }
         
-        /* Accordion - expand all and flatten for print */
-        .accordion {
-            border: none !important;
-        }
-        
-        .accordion-item {
-            border: none !important;
-            margin-bottom: 8px !important;
-            page-break-inside: avoid !important;
-        }
-        
-        .accordion-collapse {
-            display: block !important;
-            height: auto !important;
-        }
-        
-        .accordion-button {
-            padding: 6px 0 !important;
-            background: transparent !important;
-            border-bottom: 1px solid #ddd !important;
-            font-size: 11pt !important;
-            font-weight: 600 !important;
-        }
-        
-        .accordion-button::after {
-            display: none !important;
-        }
-        
-        .accordion-body {
-            padding: 4px 0 4px 16px !important;
-        }
-        
-        .accordion-body table {
+        /* Expense table for print */
+        .expense-section table {
+            width: 100% !important;
             font-size: 10pt !important;
         }
         
-        .account-row td {
-            padding: 2px 8px !important;
+        .expense-section th, .expense-section td {
+            padding: 4px 8px !important;
         }
         
         /* Totals styling */
@@ -454,7 +434,8 @@
                             </h5>
                             
                             {% if report.expenses.categories|length > 0 %}
-                            <div class="accordion" id="expensesAccordion">
+                            <!-- Screen view: Accordion with account breakdown -->
+                            <div class="accordion screen-only" id="expensesAccordion">
                                 {% for category in report.expenses.categories %}
                                 <div class="accordion-item border-0 mb-2">
                                     <h2 class="accordion-header">
@@ -494,7 +475,35 @@
                                 {% endfor %}
                             </div>
                             
-                            <div class="grand-total-row p-2 rounded mt-3">
+                            <!-- Print view: Simple table by category only -->
+                            <table class="table table-sm mb-0 print-only">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="amount-cell" style="width: 120px;">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for category in report.expenses.categories %}
+                                    <tr>
+                                        <td>{{ category.name }}</td>
+                                        <td class="amount-cell expense-amount">
+                                            {{ category.total|number_format(2) }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="grand-total-row">
+                                        <td><strong>Total Expenses</strong></td>
+                                        <td class="amount-cell expense-amount">
+                                            <strong>{{ report.expenses.total|number_format(2) }}</strong>
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            
+                            <div class="grand-total-row p-2 rounded mt-3 screen-only">
                                 <div class="d-flex justify-content-between">
                                     <strong>Total Expenses</strong>
                                     <strong class="expense-amount">{{ report.expenses.total|number_format(2) }}</strong>
