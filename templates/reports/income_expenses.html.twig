@@ -396,33 +396,40 @@
                                 <i class="bi bi-arrow-down-circle text-success"></i> Income
                             </h5>
                             
-                            {% if report.income.categories|length > 0 %}
-                            <table class="table table-sm mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Category</th>
-                                        <th class="amount-cell" style="width: 120px;">Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for category in report.income.categories %}
-                                    <tr>
-                                        <td>{{ category.name }}</td>
-                                        <td class="amount-cell income-amount">
-                                            {{ category.total|number_format(2) }}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                                <tfoot>
-                                    <tr class="grand-total-row">
-                                        <td><strong>Total Income</strong></td>
-                                        <td class="amount-cell income-amount">
-                                            <strong>{{ report.income.total|number_format(2) }}</strong>
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                            {% if report.income.currencies|length > 0 %}
+                                {% for currency, data in report.income.currencies %}
+                                {% if report.income.has_multiple_currencies %}
+                                <h6 class="text-muted mb-2 mt-3">
+                                    <i class="bi bi-currency-exchange"></i> {{ currency }}
+                                </h6>
+                                {% endif %}
+                                <table class="table table-sm mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Category</th>
+                                            <th class="amount-cell" style="width: 140px;">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for category in data.categories %}
+                                        <tr>
+                                            <td>{{ category.name }}</td>
+                                            <td class="amount-cell income-amount">
+                                                {{ category.total|number_format(2) }}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="grand-total-row">
+                                            <td><strong>Total Income {% if report.income.has_multiple_currencies %}({{ currency }}){% endif %}</strong></td>
+                                            <td class="amount-cell income-amount">
+                                                <strong>{{ data.total|number_format(2) }}</strong>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                                {% endfor %}
                             {% else %}
                             <p class="text-muted mb-0">
                                 <i class="bi bi-info-circle"></i> No income recorded for this period.
@@ -438,82 +445,90 @@
                                 <i class="bi bi-arrow-up-circle text-danger"></i> Expenses
                             </h5>
                             
-                            {% if report.expenses.categories|length > 0 %}
-                            <!-- Screen view: Accordion with account breakdown -->
-                            <div class="accordion screen-only" id="expensesAccordion">
-                                {% for category in report.expenses.categories %}
-                                <div class="accordion-item border-0 mb-2">
-                                    <h2 class="accordion-header">
-                                        <button class="accordion-button collapsed category-header py-2" 
-                                                type="button" 
-                                                data-bs-toggle="collapse" 
-                                                data-bs-target="#category-{{ loop.index }}"
-                                                aria-expanded="false">
-                                            <div class="d-flex justify-content-between w-100 pe-3">
-                                                <span>{{ category.name }}</span>
-                                                <span class="expense-amount">{{ category.total|number_format(2) }}</span>
+                            {% if report.expenses.currencies|length > 0 %}
+                                {% for currency, data in report.expenses.currencies %}
+                                {% if report.expenses.has_multiple_currencies %}
+                                <h6 class="text-muted mb-2 mt-3">
+                                    <i class="bi bi-currency-exchange"></i> {{ currency }}
+                                </h6>
+                                {% endif %}
+                                
+                                <!-- Screen view: Accordion with account breakdown -->
+                                <div class="accordion screen-only" id="expensesAccordion-{{ currency }}">
+                                    {% for category in data.categories %}
+                                    <div class="accordion-item border-0 mb-2">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed category-header py-2" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#category-{{ currency }}-{{ loop.index }}"
+                                                    aria-expanded="false">
+                                                <div class="d-flex justify-content-between w-100 pe-3">
+                                                    <span>{{ category.name }}</span>
+                                                    <span class="expense-amount">{{ category.total|number_format(2) }}</span>
+                                                </div>
+                                            </button>
+                                        </h2>
+                                        <div id="category-{{ currency }}-{{ loop.index }}" 
+                                             class="accordion-collapse collapse" 
+                                             data-bs-parent="#expensesAccordion-{{ currency }}">
+                                            <div class="accordion-body py-2 px-3">
+                                                <table class="table table-sm table-borderless mb-0">
+                                                    <tbody>
+                                                        {% for account in category.accounts %}
+                                                        <tr class="account-row">
+                                                            <td class="ps-3">
+                                                                <i class="bi bi-wallet2 text-muted"></i>
+                                                                {{ account.name }}
+                                                            </td>
+                                                            <td class="amount-cell expense-amount" style="width: 100px;">
+                                                                {{ account.total|number_format(2) }}
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
                                             </div>
-                                        </button>
-                                    </h2>
-                                    <div id="category-{{ loop.index }}" 
-                                         class="accordion-collapse collapse" 
-                                         data-bs-parent="#expensesAccordion">
-                                        <div class="accordion-body py-2 px-3">
-                                            <table class="table table-sm table-borderless mb-0">
-                                                <tbody>
-                                                    {% for account in category.accounts %}
-                                                    <tr class="account-row">
-                                                        <td class="ps-3">
-                                                            <i class="bi bi-wallet2 text-muted"></i>
-                                                            {{ account.name }}
-                                                        </td>
-                                                        <td class="amount-cell expense-amount" style="width: 100px;">
-                                                            {{ account.total|number_format(2) }}
-                                                        </td>
-                                                    </tr>
-                                                    {% endfor %}
-                                                </tbody>
-                                            </table>
                                         </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Print view: Simple table by category only -->
+                                <table class="table table-sm mb-0 print-only">
+                                    <thead>
+                                        <tr>
+                                            <th>Category</th>
+                                            <th class="amount-cell" style="width: 140px;">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for category in data.categories %}
+                                        <tr>
+                                            <td>{{ category.name }}</td>
+                                            <td class="amount-cell expense-amount">
+                                                {{ category.total|number_format(2) }}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="grand-total-row">
+                                            <td><strong>Total Expenses {% if report.expenses.has_multiple_currencies %}({{ currency }}){% endif %}</strong></td>
+                                            <td class="amount-cell expense-amount">
+                                                <strong>{{ data.total|number_format(2) }}</strong>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                                
+                                <div class="grand-total-row p-2 rounded mt-3 screen-only">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>Total Expenses {% if report.expenses.has_multiple_currencies %}({{ currency }}){% endif %}</strong>
+                                        <strong class="expense-amount">{{ data.total|number_format(2) }}</strong>
                                     </div>
                                 </div>
                                 {% endfor %}
-                            </div>
-                            
-                            <!-- Print view: Simple table by category only -->
-                            <table class="table table-sm mb-0 print-only">
-                                <thead>
-                                    <tr>
-                                        <th>Category</th>
-                                        <th class="amount-cell" style="width: 120px;">Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for category in report.expenses.categories %}
-                                    <tr>
-                                        <td>{{ category.name }}</td>
-                                        <td class="amount-cell expense-amount">
-                                            {{ category.total|number_format(2) }}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                                <tfoot>
-                                    <tr class="grand-total-row">
-                                        <td><strong>Total Expenses</strong></td>
-                                        <td class="amount-cell expense-amount">
-                                            <strong>{{ report.expenses.total|number_format(2) }}</strong>
-                                        </td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                            
-                            <div class="grand-total-row p-2 rounded mt-3 screen-only">
-                                <div class="d-flex justify-content-between">
-                                    <strong>Total Expenses</strong>
-                                    <strong class="expense-amount">{{ report.expenses.total|number_format(2) }}</strong>
-                                </div>
-                            </div>
                             {% else %}
                             <p class="text-muted mb-0">
                                 <i class="bi bi-info-circle"></i> No expenses recorded for this period.
@@ -526,21 +541,30 @@
                 <!-- Net Income Summary -->
                 <div class="row">
                     <div class="col-12">
-                        {% set net_income = report.income.total - report.expenses.total %}
-                        <div class="p-4 rounded text-center {% if net_income >= 0 %}net-income-positive{% else %}net-income-negative{% endif %}">
-                            <h4 class="mb-1">Net Income</h4>
+                        {% set income_currencies = report.income.currencies|keys %}
+                        {% set expense_currencies = report.expenses.currencies|keys %}
+                        {% set all_currencies = {} %}
+                        {% for c in income_currencies %}{% set all_currencies = all_currencies|merge({(c): true}) %}{% endfor %}
+                        {% for c in expense_currencies %}{% set all_currencies = all_currencies|merge({(c): true}) %}{% endfor %}
+                        {% for currency in all_currencies|keys|sort %}
+                        {% set income_total = report.income.currencies[currency].total|default(0) %}
+                        {% set expense_total = report.expenses.currencies[currency].total|default(0) %}
+                        {% set net_income = income_total - expense_total %}
+                        <div class="p-4 rounded text-center mb-3 {% if net_income >= 0 %}net-income-positive{% else %}net-income-negative{% endif %}">
+                            <h4 class="mb-1">Net Income {% if all_currencies|keys|length > 1 %}({{ currency }}){% endif %}</h4>
                             <h2 class="mb-0">
                                 {% if net_income >= 0 %}
                                 <i class="bi bi-graph-up-arrow"></i>
                                 {% else %}
                                 <i class="bi bi-graph-down-arrow"></i>
                                 {% endif %}
-                                {{ net_income|number_format(2) }}
+                                {{ net_income|number_format(2) }} {{ currency }}
                             </h2>
                             <small class="opacity-75">
-                                Income ({{ report.income.total|number_format(2) }}) - Expenses ({{ report.expenses.total|number_format(2) }})
+                                Income ({{ income_total|number_format(2) }}) - Expenses ({{ expense_total|number_format(2) }})
                             </small>
                         </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
@@ -564,17 +588,21 @@
 <script>
 // Auto-expand all expense categories if there are few of them
 document.addEventListener('DOMContentLoaded', function() {
-    const accordionItems = document.querySelectorAll('#expensesAccordion .accordion-item');
-    if (accordionItems.length <= 5) {
-        accordionItems.forEach(function(item) {
-            const collapse = item.querySelector('.accordion-collapse');
-            const button = item.querySelector('.accordion-button');
-            if (collapse && button) {
-                collapse.classList.add('show');
-                button.classList.remove('collapsed');
-            }
-        });
-    }
+    // Find all expense accordions (may have multiple for different currencies)
+    const accordions = document.querySelectorAll('[id^="expensesAccordion-"]');
+    accordions.forEach(function(accordion) {
+        const accordionItems = accordion.querySelectorAll('.accordion-item');
+        if (accordionItems.length <= 5) {
+            accordionItems.forEach(function(item) {
+                const collapse = item.querySelector('.accordion-collapse');
+                const button = item.querySelector('.accordion-button');
+                if (collapse && button) {
+                    collapse.classList.add('show');
+                    button.classList.remove('collapsed');
+                }
+            });
+        }
+    });
 });
 </script>
 {% endblock %}

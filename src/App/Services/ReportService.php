@@ -20,12 +20,13 @@ class ReportService
     /**
      * Generate income and expense report for a specific month
      * Fetches transactions from Akaunting API with pagination to handle large datasets
+     * Groups results by currency to handle multi-currency accounts
      * 
      * @param int $installationId The Akaunting installation ID
      * @param int $userId The user ID for authorization
      * @param int $year The year (e.g., 2024)
      * @param int $month The month (1-12)
-     * @return array Report data with income/expenses grouped by category
+     * @return array Report data with income/expenses grouped by category and currency
      */
     public function generateIncomeExpenseReport(int $installationId, int $userId, int $year, int $month): array
     {
@@ -40,70 +41,25 @@ class ReportService
         $endDate = date('Y-m-t', strtotime($startDate)); // Last day of month
         $monthName = date('F', strtotime($startDate));
 
-        // Initialize aggregation structures
-        $income = [
-            'categories' => [],
-            'total' => 0.0
-        ];
-        $expenses = [
-            'categories' => [],
-            'total' => 0.0
-        ];
-        
-        // Track categories with their account breakdowns for expenses
-        $expensesByCategory = []; // category_name => ['accounts' => [account_name => total], 'total' => 0]
-        $incomeByCategory = []; // category_name => total
+        // Initialize aggregation structures grouped by currency
+        // Structure: currency => [categories => [...], total => 0]
+        $incomeByCurrency = [];
+        $expensesByCurrency = [];
 
         // Fetch and aggregate transactions page by page
         $fetchResult = $this->fetchAndAggregateTransactions(
             $installation,
             $startDate,
             $endDate,
-            $incomeByCategory,
-            $expensesByCategory
+            $incomeByCurrency,
+            $expensesByCurrency
         );
 
-        // Build final income structure
-        foreach ($incomeByCategory as $categoryName => $total) {
-            $income['categories'][] = [
-                'name' => $categoryName ?: '(Uncategorized)',
-                'total' => $total
-            ];
-            $income['total'] += $total;
-        }
-
-        // Sort income categories by total descending
-        usort($income['categories'], function($a, $b) {
-            return $b['total'] <=> $a['total'];
-        });
-
-        // Build final expenses structure with account breakdowns
-        foreach ($expensesByCategory as $categoryName => $categoryData) {
-            $accounts = [];
-            foreach ($categoryData['accounts'] as $accountName => $accountTotal) {
-                $accounts[] = [
-                    'name' => $accountName ?: '(No Account)',
-                    'total' => $accountTotal
-                ];
-            }
-            
-            // Sort accounts by total descending
-            usort($accounts, function($a, $b) {
-                return $b['total'] <=> $a['total'];
-            });
-
-            $expenses['categories'][] = [
-                'name' => $categoryName ?: '(Uncategorized)',
-                'accounts' => $accounts,
-                'total' => $categoryData['total']
-            ];
-            $expenses['total'] += $categoryData['total'];
-        }
-
-        // Sort expense categories by total descending
-        usort($expenses['categories'], function($a, $b) {
-            return $b['total'] <=> $a['total'];
-        });
+        // Build final income structure grouped by currency
+        $income = $this->buildIncomeStructure($incomeByCurrency);
+        
+        // Build final expenses structure grouped by currency
+        $expenses = $this->buildExpensesStructure($expensesByCurrency);
 
         return [
             'income' => $income,
@@ -124,15 +80,108 @@ class ReportService
     }
 
     /**
+     * Build income structure from currency-grouped data
+     */
+    private function buildIncomeStructure(array $incomeByCurrency): array
+    {
+        $result = [
+            'currencies' => [],
+            'has_multiple_currencies' => count($incomeByCurrency) > 1
+        ];
+
+        foreach ($incomeByCurrency as $currency => $categoryData) {
+            $categories = [];
+            $total = 0.0;
+
+            foreach ($categoryData as $categoryName => $amount) {
+                $categories[] = [
+                    'name' => $categoryName ?: '(Uncategorized)',
+                    'total' => $amount
+                ];
+                $total += $amount;
+            }
+
+            // Sort categories by total descending
+            usort($categories, function($a, $b) {
+                return $b['total'] <=> $a['total'];
+            });
+
+            $result['currencies'][$currency] = [
+                'categories' => $categories,
+                'total' => $total
+            ];
+        }
+
+        // Sort currencies alphabetically
+        ksort($result['currencies']);
+
+        return $result;
+    }
+
+    /**
+     * Build expenses structure from currency-grouped data
+     */
+    private function buildExpensesStructure(array $expensesByCurrency): array
+    {
+        $result = [
+            'currencies' => [],
+            'has_multiple_currencies' => count($expensesByCurrency) > 1
+        ];
+
+        foreach ($expensesByCurrency as $currency => $categoryData) {
+            $categories = [];
+            $total = 0.0;
+
+            foreach ($categoryData as $categoryName => $data) {
+                $accounts = [];
+                foreach ($data['accounts'] as $accountName => $accountTotal) {
+                    $accounts[] = [
+                        'name' => $accountName ?: '(No Account)',
+                        'total' => $accountTotal
+                    ];
+                }
+
+                // Sort accounts by total descending
+                usort($accounts, function($a, $b) {
+                    return $b['total'] <=> $a['total'];
+                });
+
+                $categories[] = [
+                    'name' => $categoryName ?: '(Uncategorized)',
+                    'accounts' => $accounts,
+                    'total' => $data['total']
+                ];
+                $total += $data['total'];
+            }
+
+            // Sort categories by total descending
+            usort($categories, function($a, $b) {
+                return $b['total'] <=> $a['total'];
+            });
+
+            $result['currencies'][$currency] = [
+                'categories' => $categories,
+                'total' => $total
+            ];
+        }
+
+        // Sort currencies alphabetically
+        ksort($result['currencies']);
+
+        return $result;
+    }
+
+    /**
      * Fetch transactions from Akaunting API with pagination and aggregate on-the-fly
      * Uses the same batching pattern as TransactionMatchingService
+     * Groups by currency for proper multi-currency handling
      */
     private function fetchAndAggregateTransactions(
         array $installation,
         string $startDate,
         string $endDate,
-        array &$incomeByCategory,
-        array &$expensesByCategory
+        array &$incomeByCurrency,
+        array &$expensesByCurrency
     ): array {
         $password = $this->installationService->decryptPassword($installation['api_password']);
         $companyId = $installation['company_id'] ?? 1;
@@ -201,6 +250,7 @@ class ReportService
                 foreach ($transactions as $txn) {
                     $type = $txn['type'] ?? '';
                     $amount = (float)($txn['amount'] ?? 0);
+                    $currency = $txn['currency_code'] ?? 'USD';
                     
                     // Extract category name
                     $categoryName = '';
@@ -216,24 +266,33 @@ class ReportService
 
                     // Exclude transfers - they are neither income nor expenses
                     if ($type === 'income') {
-                        // Aggregate income by category
-                        if (!isset($incomeByCategory[$categoryName])) {
-                            $incomeByCategory[$categoryName] = 0.0;
+                        // Initialize currency group if needed
+                        if (!isset($incomeByCurrency[$currency])) {
+                            $incomeByCurrency[$currency] = [];
                         }
-                        $incomeByCategory[$categoryName] += $amount;
+                        // Initialize category if needed
+                        if (!isset($incomeByCurrency[$currency][$categoryName])) {
+                            $incomeByCurrency[$currency][$categoryName] = 0.0;
+                        }
+                        $incomeByCurrency[$currency][$categoryName] += $amount;
                     } elseif ($type === 'expense') {
-                        // Aggregate expenses by category and account
-                        if (!isset($expensesByCategory[$categoryName])) {
-                            $expensesByCategory[$categoryName] = [
+                        // Initialize currency group if needed
+                        if (!isset($expensesByCurrency[$currency])) {
+                            $expensesByCurrency[$currency] = [];
+                        }
+                        // Initialize category if needed
+                        if (!isset($expensesByCurrency[$currency][$categoryName])) {
+                            $expensesByCurrency[$currency][$categoryName] = [
                                 'accounts' => [],
                                 'total' => 0.0
                             ];
                         }
-                        if (!isset($expensesByCategory[$categoryName]['accounts'][$accountName])) {
-                            $expensesByCategory[$categoryName]['accounts'][$accountName] = 0.0;
+                        // Initialize account if needed
+                        if (!isset($expensesByCurrency[$currency][$categoryName]['accounts'][$accountName])) {
+                            $expensesByCurrency[$currency][$categoryName]['accounts'][$accountName] = 0.0;
                         }
-                        $expensesByCategory[$categoryName]['accounts'][$accountName] += $amount;
-                        $expensesByCategory[$categoryName]['total'] += $amount;
+                        $expensesByCurrency[$currency][$categoryName]['accounts'][$accountName] += $amount;
+                        $expensesByCurrency[$currency][$categoryName]['total'] += $amount;
                     }
                     // Skip 'income-transfer' and 'expense-transfer' types
                     
@@ -266,4 +325,3 @@ class ReportService
         ];
     }
 }
-
