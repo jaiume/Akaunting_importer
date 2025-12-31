@@ -586,14 +586,21 @@
 
 {% block scripts %}
 <script>
-// Auto-expand all expense categories if there are few of them
+// Auto-expand all expense categories if there are few of them total
 document.addEventListener('DOMContentLoaded', function() {
     // Find all expense accordions (may have multiple for different currencies)
     const accordions = document.querySelectorAll('[id^="expensesAccordion-"]');
+    
+    // Count total accordion items across all currencies
+    let totalItems = 0;
     accordions.forEach(function(accordion) {
-        const accordionItems = accordion.querySelectorAll('.accordion-item');
-        if (accordionItems.length <= 5) {
-            accordionItems.forEach(function(item) {
+        totalItems += accordion.querySelectorAll('.accordion-item').length;
+    });
+    
+    // Only auto-expand if total categories across all currencies is <= 5
+    if (totalItems <= 5) {
+        accordions.forEach(function(accordion) {
+            accordion.querySelectorAll('.accordion-item').forEach(function(item) {
                 const collapse = item.querySelector('.accordion-collapse');
                 const button = item.querySelector('.accordion-button');
                 if (collapse && button) {
@@ -601,8 +608,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     button.classList.remove('collapsed');
                 }
             });
-        }
-    });
+        });
+    }
 });
 </script>
 {% endblock %}
