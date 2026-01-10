@@ -1249,6 +1249,7 @@ class TransactionMatchingService
      * Push transaction to another installation (for cross-entity replication)
      * @param float|null $toAmount Amount in destination currency (for multi-currency)
      * @param float|null $currencyRate Exchange rate from source to destination currency
+     * @param string|null $targetCurrency Currency code of the target account
      */
     public function pushToOtherInstallation(
         int $installationId,
@@ -1265,7 +1266,8 @@ class TransactionMatchingService
         string $paymentMethod,
         string $description,
         ?float $toAmount = null,
-        ?float $currencyRate = null
+        ?float $currencyRate = null,
+        ?string $targetCurrency = null
     ): array {
         // Get the installation
         $installation = $this->installationDAO->findByIdAndUser($installationId, $userId);
@@ -1299,7 +1301,7 @@ class TransactionMatchingService
             'account_id' => $akauntingAccountId,
             'paid_at' => $date . ' 00:00:00',
             'amount' => $finalAmount,
-            'currency_code' => 'TTD', // Default currency, could be parameterized
+            'currency_code' => $targetCurrency ?? 'TTD', // Use target account's currency
             'currency_rate' => $finalRate,
             'description' => $description,
             'category_id' => $categoryId,

@@ -486,7 +486,8 @@ class ImportController extends BaseController
                 $body['payment_method'] ?? 'bank_transfer',
                 $sourceTxn['description'] ?? '',
                 isset($body['to_amount']) ? (float)$body['to_amount'] : null,
-                isset($body['currency_rate']) ? (float)$body['currency_rate'] : null
+                isset($body['currency_rate']) ? (float)$body['currency_rate'] : null,
+                $body['dest_currency'] ?? null  // Target account currency
             );
 
             // If successful, save replication status and mappings

@@ -2032,6 +2032,11 @@ function replicateToEntity(transactionId, event) {
     const selectedOption = accountSelect.options[accountSelect.selectedIndex];
     const destCurrency = selectedOption ? selectedOption.dataset.currency : null;
     
+    // Always include dest_currency for the target account (required for proper currency handling)
+    if (destCurrency) {
+        data.dest_currency = destCurrency;
+    }
+    
     // If currencies differ, include exchange rate data
     if (sourceCurrency && destCurrency && sourceCurrency !== destCurrency) {
         const toAmount = parseFloat(formData.get('to_amount')) || 0;
@@ -2045,7 +2050,6 @@ function replicateToEntity(transactionId, event) {
         data.to_amount = toAmount;
         data.currency_rate = rate;
         data.source_currency = sourceCurrency;
-        data.dest_currency = destCurrency;
     }
     
     // Validate required fields
