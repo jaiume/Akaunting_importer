@@ -700,17 +700,25 @@ class ImportController extends BaseController
             $categories = $this->vendorDAO->getCategoriesByInstallation($installationId);
             $paymentMethods = $this->vendorDAO->getPaymentMethodsByInstallation($installationId);
 
-            // Fetch Akaunting accounts for transfers (not cached, always fresh)
-            $akauntingAccounts = [];
-            try {
-                $akauntingAccounts = $this->installationService->fetchAkauntingAccounts(
-                    $installationId,
-                    $user['user_id']
-                );
-            } catch (\Exception $e) {
-                // Don't fail the whole request if accounts fetch fails
-                error_log('Failed to fetch Akaunting accounts: ' . $e->getMessage());
+            // Check if we need to refresh account cache
+            $lastAccountCached = $this->vendorDAO->getLastAccountCacheTime($installationId);
+            $accountCacheAge = $lastAccountCached ? (time() - strtotime($lastAccountCached)) : PHP_INT_MAX;
+
+            if ($refresh || $accountCacheAge > $cacheMaxAge) {
+                try {
+                    $freshAccounts = $this->installationService->fetchAkauntingAccounts(
+                        $installationId,
+                        $user['user_id']
+                    );
+                    if ($refresh) {
+                        $this->vendorDAO->clearAccountsCache($installationId);
+                    }
+                    $this->vendorDAO->cacheAccounts($installationId, $freshAccounts);
+                } catch (\Exception $e) {
+                    error_log('Failed to refresh Akaunting accounts cache: ' . $e->getMessage());
+                }
             }
+            $akauntingAccounts = $this->vendorDAO->getAccountsByInstallation($installationId);
 
             // Check for suggested mapping based on description (type + vendor + category + payment method + transfer account)
             $suggested = null;

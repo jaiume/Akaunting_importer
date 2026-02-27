@@ -3,14 +3,29 @@
 namespace App\Services;
 
 use App\DAO\InstallationDAO;
+use App\DAO\VendorDAO;
 
 class InstallationService
 {
     private InstallationDAO $installationDAO;
+    private VendorDAO $vendorDAO;
 
-    public function __construct(InstallationDAO $installationDAO)
+    public function __construct(InstallationDAO $installationDAO, VendorDAO $vendorDAO)
     {
         $this->installationDAO = $installationDAO;
+        $this->vendorDAO = $vendorDAO;
+    }
+
+    /**
+     * Check whether a cached timestamp is older than the given max age in seconds.
+     * Returns true (stale) when there is no cached timestamp at all.
+     */
+    private function isCacheStale(?string $cachedAt, int $maxAgeSeconds): bool
+    {
+        if ($cachedAt === null) {
+            return true;
+        }
+        return (time() - strtotime($cachedAt)) > $maxAgeSeconds;
     }
 
     /**
@@ -517,25 +532,66 @@ class InstallationService
      * @param string|null $description Transaction description for predictive mapping lookup
      */
     public function getFormDataForInstallation(
-        int $installationId, 
+        int $installationId,
         int $userId,
         ?int $sourceInstallationId = null,
         ?int $sourceVendorId = null,
         ?int $sourceCategoryId = null,
-        ?string $description = null
+        ?string $description = null,
+        bool $refresh = false
     ): array {
         $installation = $this->installationDAO->findByIdAndUser($installationId, $userId);
-        
+
         if (!$installation) {
             throw new \Exception('Installation not found');
         }
 
-        // Fetch all data from Akaunting
-        $vendors = $this->fetchAkauntingContacts($installationId, $userId, 'vendor');
-        $customers = $this->fetchAkauntingContacts($installationId, $userId, 'customer');
-        $categories = $this->fetchAkauntingCategories($installationId, $userId);
-        $paymentMethods = $this->fetchAkauntingPaymentMethods($installationId, $userId);
-        $accounts = $this->fetchAkauntingAccounts($installationId, $userId);
+        $cacheMaxAge = 86400; // 24 hours
+
+        // --- Vendors ---
+        if ($refresh) {
+            $this->vendorDAO->clearContactsCache($installationId, 'vendor');
+        }
+        if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCacheTime($installationId, 'vendor'), $cacheMaxAge)) {
+            $this->vendorDAO->cacheContacts($installationId, $this->fetchAkauntingContacts($installationId, $userId, 'vendor'));
+        }
+        $vendors = $this->vendorDAO->getContactsByInstallation($installationId, 'vendor');
+
+        // --- Customers ---
+        if ($refresh) {
+            $this->vendorDAO->clearContactsCache($installationId, 'customer');
+        }
+        if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCacheTime($installationId, 'customer'), $cacheMaxAge)) {
+            $this->vendorDAO->cacheContacts($installationId, $this->fetchAkauntingContacts($installationId, $userId, 'customer'));
+        }
+        $customers = $this->vendorDAO->getContactsByInstallation($installationId, 'customer');
+
+        // --- Categories ---
+        if ($refresh) {
+            $this->vendorDAO->clearCategoriesCache($installationId);
+        }
+        if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCategoryCacheTime($installationId), $cacheMaxAge)) {
+            $this->vendorDAO->cacheCategories($installationId, $this->fetchAkauntingCategories($installationId, $userId));
+        }
+        $categories = $this->vendorDAO->getCategoriesByInstallation($installationId);
+
+        // --- Payment Methods ---
+        if ($refresh) {
+            $this->vendorDAO->clearPaymentMethodsCache($installationId);
+        }
+        if ($refresh || $this->isCacheStale($this->vendorDAO->getLastPaymentMethodCacheTime($installationId), $cacheMaxAge)) {
+            $this->vendorDAO->cachePaymentMethods($installationId, $this->fetchAkauntingPaymentMethods($installationId, $userId));
+        }
+        $paymentMethods = $this->vendorDAO->getPaymentMethodsByInstallation($installationId);
+
+        // --- Accounts ---
+        if ($refresh) {
+            $this->vendorDAO->clearAccountsCache($installationId);
+        }
+        if ($refresh || $this->isCacheStale($this->vendorDAO->getLastAccountCacheTime($installationId), $cacheMaxAge)) {
+            $this->vendorDAO->cacheAccounts($installationId, $this->fetchAkauntingAccounts($installationId, $userId));
+        }
+        $accounts = $this->vendorDAO->getAccountsByInstallation($installationId);
 
         // Look up suggested mapping - prefer description-based mapping, fall back to cross-entity mapping
         $suggested = null;

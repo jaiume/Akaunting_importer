@@ -1738,8 +1738,9 @@ function onReplicateEntityChange(transactionId) {
     const sourceCategoryId = form.querySelector('[name="source_category_id"]').value;
     const description = form.dataset.description || '';
     
-    // Create cache key that includes description for proper caching per transaction type
-    const cacheKey = installationId + '_' + (description ? description.substring(0, 50) : 'no_desc');
+    // Cache key is installation-only; description only influences the 'suggested' mapping lookup,
+    // not the vendor/category/account lists themselves.
+    const cacheKey = String(installationId);
     
     // Check cache first (keyed by installation + description prefix)
     if (installationFormDataCache[cacheKey]) {
@@ -1991,7 +1992,7 @@ function onReplicateTypeChange(transactionId) {
     }
     
     // Find cached data using the same cache key format as onReplicateEntityChange
-    const cacheKey = installationId + '_' + (description ? description.substring(0, 50) : 'no_desc');
+    const cacheKey = String(installationId);
     
     // Re-populate contacts and categories with cached data
     if (installationId && installationFormDataCache[cacheKey]) {
@@ -2100,7 +2101,7 @@ function replicateToEntity(transactionId, event) {
     return false;
 }
 
-// Refresh vendors and categories cache
+// Refresh vendors and categories cache (source install) and invalidate all target install caches
 function refreshVendorsCategories() {
     const btn = document.getElementById('refresh-cache-btn');
     const originalHtml = btn.innerHTML;
@@ -2112,6 +2113,9 @@ function refreshVendorsCategories() {
         .then(data => {
             btn.disabled = false;
             if (data.success) {
+                // Clear both in-memory caches on success so subsequent loads hit fresh DB data
+                formDataCache = null;
+                installationFormDataCache = {};
                 btn.innerHTML = '<i class="bi bi-check"></i> Refreshed!';
                 setTimeout(() => {
                     btn.innerHTML = originalHtml;

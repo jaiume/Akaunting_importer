@@ -146,7 +146,7 @@ $containerBuilder->addDefinitions([
     },
     
     InstallationService::class => function (ContainerInterface $c) {
-        return new InstallationService($c->get(InstallationDAO::class));
+        return new InstallationService($c->get(InstallationDAO::class), $c->get(VendorDAO::class));
     },
     
     AccountLinkService::class => function (ContainerInterface $c) {

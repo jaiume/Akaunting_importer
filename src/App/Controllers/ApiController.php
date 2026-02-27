@@ -172,14 +172,18 @@ class ApiController extends BaseController
         // Transaction description for predictive replication mapping
         $description = isset($queryParams['description']) ? trim($queryParams['description']) : null;
 
+        // Force-refresh the DB cache when explicitly requested
+        $refresh = isset($queryParams['refresh']);
+
         try {
             $formData = $this->installationService->getFormDataForInstallation(
-                $installationId, 
+                $installationId,
                 $user['user_id'],
                 $sourceInstallationId,
                 $sourceVendorId,
                 $sourceCategoryId,
-                $description
+                $description,
+                $refresh
             );
             return $this->json($response, array_merge(['success' => true], $formData));
         } catch (\Exception $e) {

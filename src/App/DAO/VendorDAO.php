@@ -264,6 +264,126 @@ class VendorDAO
         return $result['last_cached'] ?? null;
     }
 
+    // ============== Contacts Clear (type-scoped) ==============
+
+    /**
+     * Clear cached contacts for an installation by type (vendor or customer)
+     */
+    public function clearContactsCache(int $installationId, string $type): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM akaunting_contacts WHERE installation_id = :installation_id AND type = :type");
+        return $stmt->execute(['installation_id' => $installationId, 'type' => $type]);
+    }
+
+    // ============== Categories Clear ==============
+
+    /**
+     * Clear cached categories for an installation
+     */
+    public function clearCategoriesCache(int $installationId): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM akaunting_categories WHERE installation_id = :installation_id");
+        return $stmt->execute(['installation_id' => $installationId]);
+    }
+
+    // ============== Payment Methods Clear ==============
+
+    /**
+     * Clear cached payment methods for an installation
+     */
+    public function clearPaymentMethodsCache(int $installationId): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM akaunting_payment_methods WHERE installation_id = :installation_id");
+        return $stmt->execute(['installation_id' => $installationId]);
+    }
+
+    // ============== Accounts Cache ==============
+
+    /**
+     * Get all cached accounts for an installation
+     */
+    public function getAccountsByInstallation(int $installationId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT * FROM akaunting_accounts
+            WHERE installation_id = :installation_id
+            ORDER BY name
+        ");
+        $stmt->execute(['installation_id' => $installationId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cache/update a single account from Akaunting
+     */
+    public function upsertAccount(int $installationId, array $account): bool
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO akaunting_accounts
+            (installation_id, akaunting_account_id, name, number, currency_code, type, opening_balance, current_balance, enabled, cached_at)
+            VALUES (:installation_id, :akaunting_account_id, :name, :number, :currency_code, :type, :opening_balance, :current_balance, :enabled, NOW())
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                number = VALUES(number),
+                currency_code = VALUES(currency_code),
+                type = VALUES(type),
+                opening_balance = VALUES(opening_balance),
+                current_balance = VALUES(current_balance),
+                enabled = VALUES(enabled),
+                cached_at = NOW(),
+                updated_at = NOW()
+        ");
+        return $stmt->execute([
+            'installation_id'    => $installationId,
+            'akaunting_account_id' => $account['id'],
+            'name'               => $account['name'],
+            'number'             => $account['number'] ?? null,
+            'currency_code'      => $account['currency_code'] ?? null,
+            'type'               => $account['type'] ?? null,
+            'opening_balance'    => $account['opening_balance'] ?? 0,
+            'current_balance'    => $account['current_balance'] ?? 0,
+            'enabled'            => $account['enabled'] ?? 1,
+        ]);
+    }
+
+    /**
+     * Bulk cache accounts from Akaunting
+     */
+    public function cacheAccounts(int $installationId, array $accounts): int
+    {
+        $count = 0;
+        foreach ($accounts as $account) {
+            if ($this->upsertAccount($installationId, $account)) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    /**
+     * Get the last account cache time for an installation
+     */
+    public function getLastAccountCacheTime(int $installationId): ?string
+    {
+        $stmt = $this->db->prepare("
+            SELECT MAX(cached_at) as last_cached
+            FROM akaunting_accounts
+            WHERE installation_id = :installation_id
+        ");
+        $stmt->execute(['installation_id' => $installationId]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result['last_cached'] ?? null;
+    }
+
+    /**
+     * Clear cached accounts for an installation
+     */
+    public function clearAccountsCache(int $installationId): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM akaunting_accounts WHERE installation_id = :installation_id");
+        return $stmt->execute(['installation_id' => $installationId]);
+    }
+
     // ============== Transaction Mappings (Vendor + Category + Payment Method) ==============
 
     /**

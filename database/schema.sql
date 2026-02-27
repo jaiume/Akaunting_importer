@@ -239,6 +239,27 @@ CREATE TABLE IF NOT EXISTS `akaunting_payment_methods` (
   CONSTRAINT `akaunting_payment_methods_ibfk_1` FOREIGN KEY (`installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Akaunting accounts cache
+-- Caches accounts from Akaunting to avoid slow API calls on every replication modal open
+CREATE TABLE IF NOT EXISTS `akaunting_accounts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `installation_id` int(11) NOT NULL,
+  `akaunting_account_id` int(11) NOT NULL COMMENT 'Account ID in Akaunting',
+  `name` varchar(255) NOT NULL,
+  `number` varchar(100) DEFAULT NULL,
+  `currency_code` varchar(10) DEFAULT NULL,
+  `type` varchar(50) DEFAULT NULL,
+  `opening_balance` decimal(15,4) DEFAULT 0.0000,
+  `current_balance` decimal(15,4) DEFAULT 0.0000,
+  `enabled` tinyint(1) DEFAULT 1,
+  `cached_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `installation_akaunting_account` (`installation_id`, `akaunting_account_id`),
+  KEY `installation_id` (`installation_id`),
+  CONSTRAINT `akaunting_accounts_ibfk_1` FOREIGN KEY (`installation_id`) REFERENCES `akaunting_installations` (`installation_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Transaction mappings table
 -- Maps imported transaction descriptions to vendor, category, and payment method
 -- Used for auto-suggesting values when pushing transactions
