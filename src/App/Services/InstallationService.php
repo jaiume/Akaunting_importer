@@ -29,6 +29,52 @@ class InstallationService
     }
 
     /**
+     * Normalize DB contact rows to the same shape as fetchAkauntingContacts() returns,
+     * using 'id' for the Akaunting contact ID (as expected by the frontend JS).
+     */
+    private function normalizeContacts(array $rows): array
+    {
+        return array_map(fn($r) => [
+            'id'      => $r['akaunting_contact_id'],
+            'name'    => $r['name'],
+            'email'   => $r['email'] ?? null,
+            'type'    => $r['type'] ?? null,
+            'enabled' => $r['enabled'] ?? true,
+        ], $rows);
+    }
+
+    /**
+     * Normalize DB category rows to the same shape as fetchAkauntingCategories() returns.
+     */
+    private function normalizeCategories(array $rows): array
+    {
+        return array_map(fn($r) => [
+            'id'      => $r['akaunting_category_id'],
+            'name'    => $r['name'],
+            'type'    => $r['type'] ?? null,
+            'color'   => $r['color'] ?? null,
+            'enabled' => $r['enabled'] ?? true,
+        ], $rows);
+    }
+
+    /**
+     * Normalize DB account rows to the same shape as fetchAkauntingAccounts() returns.
+     */
+    private function normalizeAccounts(array $rows): array
+    {
+        return array_map(fn($r) => [
+            'id'              => $r['akaunting_account_id'],
+            'name'            => $r['name'],
+            'number'          => $r['number'] ?? null,
+            'currency_code'   => $r['currency_code'] ?? null,
+            'type'            => $r['type'] ?? null,
+            'opening_balance' => $r['opening_balance'] ?? 0,
+            'current_balance' => $r['current_balance'] ?? 0,
+            'enabled'         => $r['enabled'] ?? true,
+        ], $rows);
+    }
+
+    /**
      * Get all installations for user
      */
     public function getInstallationsByUser(int $userId): array
@@ -555,7 +601,7 @@ class InstallationService
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCacheTime($installationId, 'vendor'), $cacheMaxAge)) {
             $this->vendorDAO->cacheContacts($installationId, $this->fetchAkauntingContacts($installationId, $userId, 'vendor'));
         }
-        $vendors = $this->vendorDAO->getContactsByInstallation($installationId, 'vendor');
+        $vendors = $this->normalizeContacts($this->vendorDAO->getContactsByInstallation($installationId, 'vendor'));
 
         // --- Customers ---
         if ($refresh) {
@@ -564,7 +610,7 @@ class InstallationService
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCacheTime($installationId, 'customer'), $cacheMaxAge)) {
             $this->vendorDAO->cacheContacts($installationId, $this->fetchAkauntingContacts($installationId, $userId, 'customer'));
         }
-        $customers = $this->vendorDAO->getContactsByInstallation($installationId, 'customer');
+        $customers = $this->normalizeContacts($this->vendorDAO->getContactsByInstallation($installationId, 'customer'));
 
         // --- Categories ---
         if ($refresh) {
@@ -573,7 +619,7 @@ class InstallationService
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCategoryCacheTime($installationId), $cacheMaxAge)) {
             $this->vendorDAO->cacheCategories($installationId, $this->fetchAkauntingCategories($installationId, $userId));
         }
-        $categories = $this->vendorDAO->getCategoriesByInstallation($installationId);
+        $categories = $this->normalizeCategories($this->vendorDAO->getCategoriesByInstallation($installationId));
 
         // --- Payment Methods ---
         if ($refresh) {
@@ -591,7 +637,7 @@ class InstallationService
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastAccountCacheTime($installationId), $cacheMaxAge)) {
             $this->vendorDAO->cacheAccounts($installationId, $this->fetchAkauntingAccounts($installationId, $userId));
         }
-        $accounts = $this->vendorDAO->getAccountsByInstallation($installationId);
+        $accounts = $this->normalizeAccounts($this->vendorDAO->getAccountsByInstallation($installationId));
 
         // Look up suggested mapping - prefer description-based mapping, fall back to cross-entity mapping
         $suggested = null;
