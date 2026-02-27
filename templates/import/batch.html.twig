@@ -2113,8 +2113,18 @@ function refreshVendorsCategories() {
         .then(data => {
             btn.disabled = false;
             if (data.success) {
-                // Clear both in-memory caches on success so subsequent loads hit fresh DB data
-                formDataCache = null;
+                // Populate formDataCache with the fresh data returned by the refresh call
+                // so that onTypeChange() immediately has the updated vendor/customer lists.
+                // Setting it to null here would break type-switching until the push row is closed and reopened.
+                formDataCache = {
+                    vendors: data.vendors || [],
+                    customers: data.customers || [],
+                    categories: data.categories || [],
+                    payment_methods: data.payment_methods || [],
+                    akaunting_accounts: data.akaunting_accounts || [],
+                    suggested: data.suggested || null
+                };
+                // Clear target installation caches so the next entity selection re-fetches
                 installationFormDataCache = {};
                 btn.innerHTML = '<i class="bi bi-check"></i> Refreshed!';
                 setTimeout(() => {
