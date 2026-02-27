@@ -1588,10 +1588,14 @@ function pushToAkaunting(transactionId, event) {
 
 // Cache for entities with installations
 let entitiesCache = null;
-// Cache for installation form data (keyed by installation_id + description hash for uniqueness)
+// Cache for installation form data (keyed by installation_id)
 let installationFormDataCache = {};
 // Cache for replication predictions (keyed by transactionId)
 let replicationPredictionCache = {};
+// Set to true after Refresh is clicked; causes the next form-data fetch per target
+// installation to pass ?refresh=1 so the backend re-fetches from Akaunting and
+// updates the DB cache (not just the JS cache).
+let pendingInstallationRefresh = false;
 // Current entity's installation ID (for source mapping info)
 const sourceInstallationId = {{ batch.installation_id ?? 'null' }};
 
@@ -1757,6 +1761,11 @@ function onReplicateEntityChange(transactionId) {
         if (sourceCategoryId) params.push('source_category_id=' + sourceCategoryId);
         if (description) params.push('description=' + encodeURIComponent(description));
     }
+    // If the user just clicked Refresh, force the backend to bypass the DB cache
+    // and re-fetch from Akaunting, updating the DB cache with any new records.
+    if (pendingInstallationRefresh) {
+        params.push('refresh=1');
+    }
     if (params.length > 0) {
         url += '?' + params.join('&');
     }
@@ -1778,6 +1787,9 @@ function onReplicateEntityChange(transactionId) {
                 }
                 
                 installationFormDataCache[cacheKey] = data;
+                // One installation has now been refreshed from Akaunting; clear the flag
+                // so subsequent entity selections use the normal cache-first path.
+                pendingInstallationRefresh = false;
                 populateReplicateFormSelects(transactionId, data);
             } else {
                 accountSelect.innerHTML = '<option value="">Error loading</option>';
@@ -2124,8 +2136,10 @@ function refreshVendorsCategories() {
                     akaunting_accounts: data.akaunting_accounts || [],
                     suggested: data.suggested || null
                 };
-                // Clear target installation caches so the next entity selection re-fetches
+                // Clear target installation JS caches and mark that the backend DB caches
+                // also need refreshing on the next entity selection.
                 installationFormDataCache = {};
+                pendingInstallationRefresh = true;
                 btn.innerHTML = '<i class="bi bi-check"></i> Refreshed!';
                 setTimeout(() => {
                     btn.innerHTML = originalHtml;
