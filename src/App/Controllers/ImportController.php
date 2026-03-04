@@ -718,7 +718,9 @@ class ImportController extends BaseController
                     error_log('Failed to refresh Akaunting accounts cache: ' . $e->getMessage());
                 }
             }
-            $akauntingAccounts = $this->vendorDAO->getAccountsByInstallation($installationId);
+            $akauntingAccounts = $this->installationService->normalizeAccounts(
+                $this->vendorDAO->getAccountsByInstallation($installationId)
+            );
 
             // Check for suggested mapping based on description (type + vendor + category + payment method + transfer account)
             $suggested = null;

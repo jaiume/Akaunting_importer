@@ -32,7 +32,7 @@ class InstallationService
      * Normalize DB contact rows to the same shape as fetchAkauntingContacts() returns,
      * using 'id' for the Akaunting contact ID (as expected by the frontend JS).
      */
-    private function normalizeContacts(array $rows): array
+    public function normalizeContacts(array $rows): array
     {
         return array_map(fn($r) => [
             'id'      => $r['akaunting_contact_id'],
@@ -46,7 +46,7 @@ class InstallationService
     /**
      * Normalize DB category rows to the same shape as fetchAkauntingCategories() returns.
      */
-    private function normalizeCategories(array $rows): array
+    public function normalizeCategories(array $rows): array
     {
         return array_map(fn($r) => [
             'id'      => $r['akaunting_category_id'],
@@ -60,7 +60,7 @@ class InstallationService
     /**
      * Normalize DB account rows to the same shape as fetchAkauntingAccounts() returns.
      */
-    private function normalizeAccounts(array $rows): array
+    public function normalizeAccounts(array $rows): array
     {
         return array_map(fn($r) => [
             'id'              => $r['akaunting_account_id'],
