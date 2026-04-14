@@ -217,7 +217,7 @@ class RBLBankPDF extends BaseProcessor
                 $startsWithDate = preg_match('/^(\d{2})\/(\d{2})\s*/', $cleanLine);
                 
                 // Check if line has amount pattern at end (indicates complete transaction line)
-                $hasAmount = preg_match('/\s+([\d,]+\.?\d*)\s*(-?)\s+([\d,]+\.?\d*|\([\d,]+\.?\d*\))$/', $cleanLine);
+                $hasAmount = preg_match('/\s{2,}([\d,]+\.?\d*)\s*(-?)\s+([\d,]+\.?\d*|\([\d,]+\.?\d*\))$/', $cleanLine);
                 
                 if ($startsWithDate && $hasAmount) {
                     // Complete single-line transaction
@@ -324,7 +324,7 @@ class RBLBankPDF extends BaseProcessor
         // "847.67 870.51"    (credit)
         // "20.00 - 1,893.22" (debit with comma in balance)
         
-        $amountPattern = '/\s+([\d,]+\.?\d*)\s*(-?)\s+([\d,]+\.?\d*|\([\d,]+\.?\d*\))$/';
+        $amountPattern = '/\s{2,}([\d,]+\.?\d*)\s*(-?)\s+([\d,]+\.?\d*|\([\d,]+\.?\d*\))$/';
         
         if (!preg_match($amountPattern, $remainder, $amountMatches)) {
             return null;
