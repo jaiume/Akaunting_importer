@@ -595,47 +595,42 @@ class InstallationService
         $cacheMaxAge = 86400; // 24 hours
 
         // --- Vendors ---
-        if ($refresh) {
-            $this->vendorDAO->clearContactsCache($installationId, 'vendor');
-        }
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCacheTime($installationId, 'vendor'), $cacheMaxAge)) {
-            $this->vendorDAO->cacheContacts($installationId, $this->fetchAkauntingContacts($installationId, $userId, 'vendor'));
+            $freshVendors = $this->fetchAkauntingContacts($installationId, $userId, 'vendor');
+            $this->vendorDAO->clearContactsCache($installationId, 'vendor');
+            $this->vendorDAO->cacheContacts($installationId, $freshVendors);
         }
         $vendors = $this->normalizeContacts($this->vendorDAO->getContactsByInstallation($installationId, 'vendor'));
 
         // --- Customers ---
-        if ($refresh) {
-            $this->vendorDAO->clearContactsCache($installationId, 'customer');
-        }
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCacheTime($installationId, 'customer'), $cacheMaxAge)) {
-            $this->vendorDAO->cacheContacts($installationId, $this->fetchAkauntingContacts($installationId, $userId, 'customer'));
+            $freshCustomers = $this->fetchAkauntingContacts($installationId, $userId, 'customer');
+            $this->vendorDAO->clearContactsCache($installationId, 'customer');
+            $this->vendorDAO->cacheContacts($installationId, $freshCustomers);
         }
         $customers = $this->normalizeContacts($this->vendorDAO->getContactsByInstallation($installationId, 'customer'));
 
         // --- Categories ---
-        if ($refresh) {
-            $this->vendorDAO->clearCategoriesCache($installationId);
-        }
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastCategoryCacheTime($installationId), $cacheMaxAge)) {
-            $this->vendorDAO->cacheCategories($installationId, $this->fetchAkauntingCategories($installationId, $userId));
+            $freshCategories = $this->fetchAkauntingCategories($installationId, $userId);
+            $this->vendorDAO->clearCategoriesCache($installationId);
+            $this->vendorDAO->cacheCategories($installationId, $freshCategories);
         }
         $categories = $this->normalizeCategories($this->vendorDAO->getCategoriesByInstallation($installationId));
 
         // --- Payment Methods ---
-        if ($refresh) {
-            $this->vendorDAO->clearPaymentMethodsCache($installationId);
-        }
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastPaymentMethodCacheTime($installationId), $cacheMaxAge)) {
-            $this->vendorDAO->cachePaymentMethods($installationId, $this->fetchAkauntingPaymentMethods($installationId, $userId));
+            $freshPaymentMethods = $this->fetchAkauntingPaymentMethods($installationId, $userId);
+            $this->vendorDAO->clearPaymentMethodsCache($installationId);
+            $this->vendorDAO->cachePaymentMethods($installationId, $freshPaymentMethods);
         }
         $paymentMethods = $this->vendorDAO->getPaymentMethodsByInstallation($installationId);
 
         // --- Accounts ---
-        if ($refresh) {
-            $this->vendorDAO->clearAccountsCache($installationId);
-        }
         if ($refresh || $this->isCacheStale($this->vendorDAO->getLastAccountCacheTime($installationId), $cacheMaxAge)) {
-            $this->vendorDAO->cacheAccounts($installationId, $this->fetchAkauntingAccounts($installationId, $userId));
+            $freshAccounts = $this->fetchAkauntingAccounts($installationId, $userId);
+            $this->vendorDAO->clearAccountsCache($installationId);
+            $this->vendorDAO->cacheAccounts($installationId, $freshAccounts);
         }
         $accounts = $this->normalizeAccounts($this->vendorDAO->getAccountsByInstallation($installationId));
 

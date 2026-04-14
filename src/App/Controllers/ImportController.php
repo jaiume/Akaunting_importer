@@ -645,12 +645,12 @@ class ImportController extends BaseController
             $vendorCacheAge = $lastVendorCached ? (time() - strtotime($lastVendorCached)) : PHP_INT_MAX;
 
             if ($refresh || $vendorCacheAge > $cacheMaxAge) {
-                // Fetch vendors from Akaunting and cache
                 $contacts = $this->installationService->fetchAkauntingContacts(
                     $installationId, 
                     $user['user_id'], 
                     'vendor'
                 );
+                $this->vendorDAO->clearContactsCache($installationId, 'vendor');
                 $this->vendorDAO->cacheContacts($installationId, $contacts);
             }
 
@@ -659,12 +659,12 @@ class ImportController extends BaseController
             $customerCacheAge = $lastCustomerCached ? (time() - strtotime($lastCustomerCached)) : PHP_INT_MAX;
 
             if ($refresh || $customerCacheAge > $cacheMaxAge) {
-                // Fetch customers from Akaunting and cache
                 $customers = $this->installationService->fetchAkauntingContacts(
                     $installationId, 
                     $user['user_id'], 
                     'customer'
                 );
+                $this->vendorDAO->clearContactsCache($installationId, 'customer');
                 $this->vendorDAO->cacheContacts($installationId, $customers);
             }
 
@@ -673,11 +673,11 @@ class ImportController extends BaseController
             $categoryCacheAge = $lastCategoryCached ? (time() - strtotime($lastCategoryCached)) : PHP_INT_MAX;
 
             if ($refresh || $categoryCacheAge > $cacheMaxAge) {
-                // Fetch categories from Akaunting and cache
                 $categories = $this->installationService->fetchAkauntingCategories(
                     $installationId, 
                     $user['user_id']
                 );
+                $this->vendorDAO->clearCategoriesCache($installationId);
                 $this->vendorDAO->cacheCategories($installationId, $categories);
             }
 
@@ -686,11 +686,11 @@ class ImportController extends BaseController
             $paymentCacheAge = $lastPaymentCached ? (time() - strtotime($lastPaymentCached)) : PHP_INT_MAX;
 
             if ($refresh || $paymentCacheAge > $cacheMaxAge) {
-                // Fetch payment methods from Akaunting and cache
                 $paymentMethods = $this->installationService->fetchAkauntingPaymentMethods(
                     $installationId, 
                     $user['user_id']
                 );
+                $this->vendorDAO->clearPaymentMethodsCache($installationId);
                 $this->vendorDAO->cachePaymentMethods($installationId, $paymentMethods);
             }
 
@@ -710,9 +710,7 @@ class ImportController extends BaseController
                         $installationId,
                         $user['user_id']
                     );
-                    if ($refresh) {
-                        $this->vendorDAO->clearAccountsCache($installationId);
-                    }
+                    $this->vendorDAO->clearAccountsCache($installationId);
                     $this->vendorDAO->cacheAccounts($installationId, $freshAccounts);
                 } catch (\Exception $e) {
                     error_log('Failed to refresh Akaunting accounts cache: ' . $e->getMessage());
