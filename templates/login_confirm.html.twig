@@ -1,0 +1,33 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Confirm login - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow">
+            <div class="card-body p-4 text-center">
+                <h2 class="card-title mb-3">
+                    <i class="bi bi-shield-check"></i> Confirm login
+                </h2>
+                <p class="text-muted small mb-4">
+                    Securing your session&hellip; If nothing happens, use the button below.
+                </p>
+                {# Same-origin relative action avoids http/https or proxy base_url mismatches #}
+                <form id="login-confirm-form" method="post" action="../confirm">
+                    <input type="hidden" name="token" value="{{ token|e('html_attr') }}">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> Continue to Akaunting Importer
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var f = document.getElementById('login-confirm-form');
+    if (f) { f.submit(); }
+})();
+</script>
+{% endblock %}

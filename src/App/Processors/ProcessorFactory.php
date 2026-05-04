@@ -2,6 +2,7 @@
 
 namespace App\Processors;
 
+use App\Services\PdfExtractClient;
 use PDO;
 
 /**
@@ -10,10 +11,12 @@ use PDO;
 class ProcessorFactory
 {
     private $db;
+    private PdfExtractClient $pdfExtractClient;
 
-    public function __construct(PDO $db)
+    public function __construct(PDO $db, PdfExtractClient $pdfExtractClient)
     {
         $this->db = $db;
+        $this->pdfExtractClient = $pdfExtractClient;
     }
 
     /**
@@ -37,6 +40,9 @@ class ProcessorFactory
         }
 
         $className = $processorMap[$processorName];
+        if ($className === RBLBankPDF::class || $className === RBLCreditCardPDF::class) {
+            return new $className($this->db, $this->pdfExtractClient);
+        }
         return new $className($this->db);
     }
 

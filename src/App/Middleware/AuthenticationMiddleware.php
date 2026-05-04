@@ -5,6 +5,7 @@ namespace App\Middleware;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
 use Slim\Psr7\Response;
+use App\RequestCookies;
 use App\Services\AuthenticationService;
 use App\Services\ConfigService;
 
@@ -23,9 +24,8 @@ class AuthenticationMiddleware
 
     public function __invoke(Request $request, RequestHandler $handler): Response
     {
-        $cookieName = $this->config::get('auth.cookie_name', 'auth_token');
-        $cookies = $request->getCookieParams();
-        $token = $cookies[$cookieName] ?? null;
+        $cookieName = $this->config::get('auth.cookie_name', 'akaunting_importer_auth');
+        $token = RequestCookies::getImporterSessionToken($request, $cookieName);
 
         if (!$token) {
             return $this->redirectToLogin();

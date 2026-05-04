@@ -69,6 +69,7 @@
 - **Bootstrap 5** - Responsive CSS framework (mobile & desktop)
 - **Token Authentication** - Cookie-based token authentication
 - **PDO** - Database abstraction
+- **Remote PDF extraction** - Bank/credit-card PDFs are converted to text via a separate **pdf-extractor** HTTP service (Poppler `pdftotext`). The importer host can run PHP with `exec`/`shell_exec` **disabled**; only the extractor needs those capabilities.
 
 ## Authentication Flow
 
@@ -79,6 +80,19 @@
 5. Middleware verifies token on each request
 6. Token expiry is extended on each request
 
+## PDF extract microservice
+
+1. Deploy the extractor from the sibling project under `pdfextractor.../public_html` (see its `README.md`). Point the web server document root at `public/`, install `poppler-utils`, and set `config/config.ini` (`auth.api_key`).
+
+2. On the importer, copy `config/config.example.ini` keys into `config/config.ini` and set **`[pdf_extract]`**:
+   - `base_url` — HTTPS URL of the extractor in production (e.g. lab: `http://192.168.11.105` with `verify_tls = false`).
+   - `api_key` — must match the extractor’s `auth.api_key`.
+   - `timeout` — seconds for large statements (e.g. `120`).
+
+3. **Hestia / shared hosting:** keep `disable_functions` strict on the **importer** site; run the extractor on a vhost or VM where PHP can run `pdftotext`.
+
+4. **Integration testing:** use `deploy-test.sh` in the extractor tree to rsync to a Debian 12 test host (see extractor `README.md`).
+
 ## Configuration
 
 Main configuration is in `config/config.ini`. Sections:
@@ -88,6 +102,7 @@ Main configuration is in `config/config.ini`. Sections:
 - `[auth]` - Authentication settings
 - `[mail]` - Email/SMTP settings
 - `[paths]` - Path configurations
+- `[pdf_extract]` - Remote PDF text extraction service (`base_url`, `api_key`, `timeout`, `verify_tls`, optional `ca_bundle`)
 
 ## Routes
 

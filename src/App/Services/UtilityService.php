@@ -71,19 +71,59 @@ class UtilityService
     }
 
     /**
-     * Get base URL of the application
+     * Get base URL of the application (honour reverse-proxy TLS/host headers).
      */
     public function getBaseUrl(): string
     {
-        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
-        $host = $_SERVER['HTTP_HOST'];
-        $baseDir = dirname($_SERVER['SCRIPT_NAME']);
-        
-        // Remove "/public" from the base URL if it exists
+        $forceHttps = $this->config::get('app.force_https_urls', false);
+        if (is_string($forceHttps)) {
+            $forceHttps = filter_var($forceHttps, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        if ($forceHttps) {
+            $protocol = 'https://';
+        } else {
+            $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+            if (is_string($forwardedProto) && $forwardedProto !== '') {
+                $first = trim(strtolower(explode(',', $forwardedProto, 2)[0]));
+                $protocol = $first === 'https' ? 'https://' : 'http://';
+            } else {
+                $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
+            }
+        }
+
+        $forwardedHost = $_SERVER['HTTP_X_FORWARDED_HOST'] ?? '';
+        if (is_string($forwardedHost) && $forwardedHost !== '') {
+            $host = trim(explode(',', $forwardedHost, 2)[0]);
+        } else {
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        }
+
+        $baseDir = dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php');
         $baseDir = str_replace('/public', '', $baseDir);
-        
-        // Ensure there's exactly one trailing slash
+
         return rtrim($protocol . $host . $baseDir, '/') . '/';
+    }
+
+    /**
+     * Whether the current request is served over HTTPS (direct or via reverse proxy).
+     */
+    public static function isHttpsRequest(): bool
+    {
+        if (!empty($_SERVER['REQUEST_SCHEME']) && strtolower((string)$_SERVER['REQUEST_SCHEME']) === 'https') {
+            return true;
+        }
+
+        $forwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+        if (is_string($forwardedProto) && $forwardedProto !== '') {
+            return strtolower(trim(explode(',', $forwardedProto, 2)[0])) === 'https';
+        }
+
+        if (isset($_SERVER['HTTPS']) && ($_SERVER['HTTPS'] === 'on' || $_SERVER['HTTPS'] === '1')) {
+            return true;
+        }
+
+        return false;
     }
 }
 

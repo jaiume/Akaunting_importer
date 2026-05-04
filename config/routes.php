@@ -33,7 +33,8 @@ return function (App $app) {
     // Authentication routes
     $app->get('/login', [AuthController::class, 'showLogin']);
     $app->post('/login', [AuthController::class, 'login']);
-    $app->get('/login/token/{token}', [AuthController::class, 'verifyToken']);
+    $app->get('/login/token/{token}', [AuthController::class, 'showLoginConfirm']);
+    $app->post('/login/confirm', [AuthController::class, 'confirmLogin']);
     $app->get('/logout', [AuthController::class, 'logout']);
 
     // ===================

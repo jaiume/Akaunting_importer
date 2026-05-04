@@ -8,23 +8,28 @@ use Slim\Views\Twig;
 use App\Services\AccountService;
 use App\Services\AccountLinkService;
 use App\Services\InstallationService;
+use App\Services\PdfExtractClient;
+use App\Exception\PdfExtractFailedException;
 
 class ApiController extends BaseController
 {
     private AccountService $accountService;
     private AccountLinkService $accountLinkService;
     private InstallationService $installationService;
+    private PdfExtractClient $pdfExtractClient;
 
     public function __construct(
-        Twig $view, 
+        Twig $view,
         AccountService $accountService,
         AccountLinkService $accountLinkService,
-        InstallationService $installationService
+        InstallationService $installationService,
+        PdfExtractClient $pdfExtractClient
     ) {
         parent::__construct($view);
         $this->accountService = $accountService;
         $this->accountLinkService = $accountLinkService;
         $this->installationService = $installationService;
+        $this->pdfExtractClient = $pdfExtractClient;
     }
 
     /**
@@ -273,6 +278,14 @@ class ApiController extends BaseController
         try {
             $result = $this->detectFileType($uploadedFile, $extension, $fileName);
             return $this->json($response, array_merge(['success' => true], $result));
+        } catch (PdfExtractFailedException $e) {
+            return $this->json($response, [
+                'success' => false,
+                'error' => [
+                    'code' => 'pdf_extract_failed',
+                    'message' => 'Could not extract text from this PDF. Try again or contact support.',
+                ],
+            ], 503);
         } catch (\Exception $e) {
             return $this->json($response, [
                 'success' => false,
@@ -381,27 +394,20 @@ class ApiController extends BaseController
         $accountNumber = null;
         $confidence = 'low';
 
-        // Try to extract text from PDF using pdftotext command if available
-        $textContent = '';
-        
-        // Create temp file for PDF
         $tempFile = tempnam(sys_get_temp_dir(), 'pdf_analyze_');
-        file_put_contents($tempFile, $content);
-        
-        // Try pdftotext
-        $output = [];
-        $returnCode = 0;
-        exec("pdftotext -l 2 " . escapeshellarg($tempFile) . " - 2>/dev/null", $output, $returnCode);
-        
-        if ($returnCode === 0 && !empty($output)) {
-            $textContent = implode("\n", $output);
-        } else {
-            // Fallback: search raw PDF content for patterns
-            $textContent = $content;
+        if ($tempFile === false) {
+            throw new PdfExtractFailedException('Could not create temporary file for PDF analysis.');
         }
-        
-        // Clean up temp file
-        @unlink($tempFile);
+
+        try {
+            file_put_contents($tempFile, $content);
+            $textContent = $this->pdfExtractClient->extractFromFile($tempFile, [
+                'layout' => false,
+                'max_pages' => 2,
+            ]);
+        } finally {
+            @unlink($tempFile);
+        }
 
         // Detect RBL Credit Card PDF
         // Patterns: Credit card numbers (4 groups of 4 digits), "Statement Period", credit card terminology

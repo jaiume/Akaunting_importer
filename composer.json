@@ -10,7 +10,6 @@
         "slim/psr7": "^1.8",
         "slim/slim": "^4.12",
         "slim/twig-view": "^3.4",
-        "smalot/pdfparser": "^2.12",
         "twig/twig": "^3.8",
         "vlucas/phpdotenv": "^5.5"
     },

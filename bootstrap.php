@@ -6,6 +6,28 @@ define('BASE_DIR', __DIR__);
 // Autoload dependencies
 require_once BASE_DIR . '/vendor/autoload.php';
 
+// nginx + PHP-FPM: getallheaders() is usually absent; Slim PSR-7 builds request cookies from it.
+if (!function_exists('getallheaders')) {
+    function getallheaders(): array
+    {
+        $headers = [];
+        foreach ($_SERVER as $name => $value) {
+            if (!is_string($name) || !is_string($value)) {
+                continue;
+            }
+            if (str_starts_with($name, 'HTTP_')) {
+                $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+            } elseif ($name === 'CONTENT_TYPE') {
+                $headers['Content-Type'] = $value;
+            } elseif ($name === 'CONTENT_LENGTH') {
+                $headers['Content-Length'] = $value;
+            }
+        }
+
+        return $headers;
+    }
+}
+
 // Load environment variables if .env exists
 if (file_exists(BASE_DIR . '/.env')) {
     $dotenv = Dotenv\Dotenv::createImmutable(BASE_DIR);

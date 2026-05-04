@@ -267,14 +267,17 @@ class AuthenticationService
     }
     
     /**
-     * Clean up expired login tokens
+     * Remove expired rows; drop old used tokens so the table does not grow forever.
+     * Important: do not delete &quot;just used&quot; rows in the same second as a real user follows
+     * the link after a bot consumed a GET (we no longer consume on GET).
      */
     private function cleanupExpiredLoginTokens(): void
     {
         try {
             $stmt = $this->db->prepare("
                 DELETE FROM login_tokens 
-                WHERE expiry <= NOW() OR used = 1
+                WHERE expiry <= NOW()
+                   OR (used = 1 AND used_at < DATE_SUB(NOW(), INTERVAL 1 DAY))
             ");
             $stmt->execute();
         } catch (\Exception $e) {

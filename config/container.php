@@ -16,8 +16,7 @@ use App\Services\InstallationService;
 use App\Services\AccountLinkService;
 use App\Services\TransactionMatchingService;
 use App\Services\ReportService;
-
-// DAOs
+use App\Services\PdfExtractClient;
 use App\DAO\EntityDAO;
 use App\DAO\AccountDAO;
 use App\DAO\BatchDAO;
@@ -111,7 +110,7 @@ $containerBuilder->addDefinitions([
     // ===================
     
     ProcessorFactory::class => function (ContainerInterface $c) {
-        return new ProcessorFactory($c->get(PDO::class));
+        return new ProcessorFactory($c->get(PDO::class), $c->get(PdfExtractClient::class));
     },
     
     // ===================
@@ -120,6 +119,10 @@ $containerBuilder->addDefinitions([
     
     UtilityService::class => function (ContainerInterface $c) {
         return new UtilityService($c->get(ConfigService::class));
+    },
+
+    PdfExtractClient::class => function () {
+        return new PdfExtractClient();
     },
     
     AuthenticationService::class => function (ContainerInterface $c) {
@@ -258,7 +261,8 @@ $containerBuilder->addDefinitions([
             $c->get('view'),
             $c->get(AccountService::class),
             $c->get(AccountLinkService::class),
-            $c->get(InstallationService::class)
+            $c->get(InstallationService::class),
+            $c->get(PdfExtractClient::class)
         );
     },
     

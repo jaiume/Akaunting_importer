@@ -2,7 +2,7 @@
 
 namespace App\Processors;
 
-use Smalot\PdfParser\Parser;
+use App\Services\PdfExtractClient;
 
 /**
  * RBL Bank PDF Import Processor
@@ -22,6 +22,14 @@ class RBLBankPDF extends BaseProcessor
     protected $statementMonth;
     protected $accountNumber;
     protected $currency = 'TTD';
+
+    private PdfExtractClient $pdfExtractClient;
+
+    public function __construct(\PDO $db, PdfExtractClient $pdfExtractClient)
+    {
+        parent::__construct($db);
+        $this->pdfExtractClient = $pdfExtractClient;
+    }
 
     public function validate(): bool
     {
@@ -62,18 +70,8 @@ class RBLBankPDF extends BaseProcessor
     protected function parseTransactions(): array
     {
         $transactions = [];
-        
-        // Try to extract text using pdftotext first (better handling of complex PDFs)
-        $fullText = $this->extractTextWithPdftotext();
-        
-        if (empty($fullText)) {
-            // Fall back to PHP parser
-            $fullText = $this->extractTextWithPhpParser();
-        }
-        
-        if (empty($fullText)) {
-            throw new \Exception("Failed to extract text from PDF");
-        }
+
+        $fullText = $this->extractTextViaRemoteService();
         
         // Extract statement period to determine year
         $this->extractStatementPeriod($fullText);
@@ -88,67 +86,28 @@ class RBLBankPDF extends BaseProcessor
     }
     
     /**
-     * Extract text using pdftotext command-line tool (from poppler-utils)
-     * This handles complex PDFs much better than PHP parsers
+     * Extract text via configured PDF microservice (Poppler pdftotext on remote host).
      */
-    protected function extractTextWithPdftotext(): ?string
-    {
-        // Check if pdftotext is available
-        $pdftotextPath = trim(shell_exec('which pdftotext 2>/dev/null') ?? '');
-        
-        if (empty($pdftotextPath)) {
-            return null;
-        }
-        
-        // Use pdftotext with layout preservation
-        $escapedPath = escapeshellarg($this->filePath);
-        $command = "{$pdftotextPath} -layout {$escapedPath} -";
-        
-        $output = shell_exec($command . ' 2>/dev/null');
-        
-        if (!empty($output) && strlen($output) > 100) {
-            return $output;
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Extract text using PHP PDF parser (fallback)
-     */
-    protected function extractTextWithPhpParser(): ?string
+    protected function extractTextViaRemoteService(): string
     {
         try {
-            $config = new \Smalot\PdfParser\Config();
-            $config->setRetainImageContent(false);
-            $parser = new Parser([], $config);
-            
-            $pdf = $parser->parseFile($this->filePath);
-            
-            // Get text from all pages
-            $fullText = '';
-            $pages = $pdf->getPages();
-            
-            foreach ($pages as $page) {
-                try {
-                    $pageText = $page->getText();
-                    $fullText .= $pageText . "\n";
-                } catch (\Exception $e) {
-                    // Skip problematic pages but continue
-                    continue;
-                }
-            }
-            
-            // If page-by-page failed, try getting full document text
-            if (empty(trim($fullText))) {
-                $fullText = $pdf->getText();
-            }
-            
-            return $fullText;
-            
-        } catch (\Exception $e) {
-            return null;
+            $text = $this->pdfExtractClient->extractFromFile($this->filePath, [
+                'layout' => true,
+                'max_pages' => null,
+            ]);
+        } catch (\Throwable $e) {
+            throw new \Exception(
+                'PDF text extraction failed: ' . $e->getMessage(),
+                0,
+                $e
+            );
         }
+
+        if (trim($text) === '' || strlen(trim($text)) < 50) {
+            throw new \Exception('PDF text extraction produced no usable text.');
+        }
+
+        return $text;
     }
     
     /**

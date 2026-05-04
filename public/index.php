@@ -11,6 +11,7 @@ $app = \DI\Bridge\Slim\Bridge::create($container);
 
 // Add RoutingMiddleware to enable route parameter access
 $app->addRoutingMiddleware();
+$app->addBodyParsingMiddleware();
 
 // Register Twig
 $container->set('view', function() use ($container) {

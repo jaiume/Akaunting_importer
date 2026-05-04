@@ -2,6 +2,8 @@
 
 namespace App\Controllers;
 
+use App\Services\ConfigService;
+use App\Services\UtilityService;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Views\Twig;
@@ -77,27 +79,44 @@ abstract class BaseController
     }
 
     /**
-     * Set cookie
+     * Set cookie (Path/Domain from config so it does not collide with other apps on the registrable domain).
      */
     protected function setCookie(Response $response, string $name, string $value, int $maxAge): Response
     {
-        return $response->withHeader('Set-Cookie', sprintf(
-            '%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d',
-            $name,
-            $value,
-            $maxAge
-        ));
+        return $response->withHeader('Set-Cookie', $this->buildAuthCookieHeader($name, $value, $maxAge));
     }
 
     /**
-     * Clear cookie
+     * Clear cookie (same Path/Domain as setCookie)
      */
     protected function clearCookie(Response $response, string $name): Response
     {
-        return $response->withHeader('Set-Cookie', sprintf(
-            '%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
-            $name
-        ));
+        return $response->withHeader('Set-Cookie', $this->buildAuthCookieHeader($name, '', 0));
+    }
+
+    private function buildAuthCookieHeader(string $name, string $value, int $maxAge): string
+    {
+        $path = (string) ConfigService::get('auth.cookie_path', '/');
+        $path = $path !== '' ? $path : '/';
+
+        $domain = trim((string) ConfigService::get('auth.cookie_domain', ''));
+        if ($domain !== '' && !preg_match('/^[a-zA-Z0-9.-]+$/', $domain)) {
+            $domain = '';
+        }
+
+        $parts = [sprintf('%s=%s', $name, $value)];
+        $parts[] = 'Path=' . $path;
+        if ($domain !== '') {
+            $parts[] = 'Domain=' . $domain;
+        }
+        $parts[] = 'HttpOnly';
+        $parts[] = 'SameSite=Lax';
+        $parts[] = 'Max-Age=' . $maxAge;
+        if (UtilityService::isHttpsRequest()) {
+            $parts[] = 'Secure';
+        }
+
+        return implode('; ', $parts);
     }
 }
 

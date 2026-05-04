@@ -18,6 +18,7 @@ A PHP application for importing bank statements (PDF and CSV) into multiple Akau
 - MySQL/MariaDB
 - Composer
 - Apache/Nginx with mod_rewrite
+- **PDF extractor** service (separate deployment) with Poppler `pdftotext` — see `SETUP.md` and the pdf-extractor `README.md`
 
 ## Installation
 
@@ -29,7 +30,7 @@ composer install
 ```
 
 3. Configure the application:
-   - Copy `config/config.ini` and update with your database credentials and settings
+   - Copy `config/config.example.ini` as a reference; maintain `config/config.ini` with your database credentials, **`[pdf_extract]`** (`base_url`, `api_key` matching the extractor), and other settings
    - Update database connection settings in `config/config.ini`
 
 4. Set up the database:

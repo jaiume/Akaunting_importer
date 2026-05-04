@@ -6,6 +6,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Views\Twig;
 use App\DAO\BatchDAO;
+use App\RequestCookies;
 use App\Services\AuthenticationService;
 use App\Services\ConfigService;
 
@@ -80,9 +81,8 @@ class DashboardController extends BaseController
     public function home(Request $request, Response $response): Response
     {
         // Check if user is authenticated via cookie
-        $cookieName = $this->config::get('auth.cookie_name', 'auth_token');
-        $cookies = $request->getCookieParams();
-        $token = $cookies[$cookieName] ?? null;
+        $cookieName = $this->config::get('auth.cookie_name', 'akaunting_importer_auth');
+        $token = RequestCookies::getImporterSessionToken($request, $cookieName);
         
         if ($token) {
             $userData = $this->authService->verifyToken($token);
