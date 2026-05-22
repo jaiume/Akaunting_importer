@@ -412,6 +412,36 @@ class TransactionMatchingService
     }
 
     /**
+     * Unmatch a single low/medium confidence transaction
+     */
+    public function unmatchTransaction(int $batchId, int $transactionId): array
+    {
+        $txn = $this->transactionDAO->findById($transactionId);
+        if (!$txn || (int)$txn['batch_id'] !== $batchId) {
+            throw new \Exception('Transaction not found');
+        }
+
+        if (empty($txn['matched_akaunting_id'])) {
+            throw new \Exception('Transaction is not matched');
+        }
+
+        if (!in_array($txn['match_confidence'] ?? '', ['low', 'medium'], true)) {
+            throw new \Exception('Only low/medium matches can be unmatched');
+        }
+
+        if ($txn['status'] === 'processed') {
+            throw new \Exception('Cannot unmatch a pushed transaction');
+        }
+
+        $this->transactionDAO->clearMatchByTransactionId($transactionId);
+
+        return [
+            'success' => true,
+            'message' => 'Match cleared',
+        ];
+    }
+
+    /**
      * Process one step of the matching job (chunked processing)
      * Returns progress info for AJAX updates
      */

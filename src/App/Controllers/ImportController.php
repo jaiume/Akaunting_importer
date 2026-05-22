@@ -447,6 +447,38 @@ class ImportController extends BaseController
     }
 
     /**
+     * Unmatch a single low/medium confidence transaction
+     */
+    public function unmatchTransaction(Request $request, Response $response): Response
+    {
+        $user = $this->getUser($request);
+        $batchId = (int)$this->getRouteArg($request, 'batch_id');
+
+        if (!$this->importService->batchBelongsToUser($batchId, $user['user_id'])) {
+            return $this->json($response, [
+                'success' => false,
+                'message' => 'Batch not found'
+            ], 404);
+        }
+
+        try {
+            $body = json_decode($request->getBody()->getContents(), true);
+            $result = $this->matchingService->unmatchTransaction(
+                $batchId,
+                (int)($body['transaction_id'] ?? 0)
+            );
+
+            return $this->json($response, $result);
+        } catch (\Exception $e) {
+            error_log('Unmatch transaction error: ' . $e->getMessage());
+            return $this->json($response, [
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
      * Replicate a transaction to another entity's Akaunting installation
      */
     public function replicateTransaction(Request $request, Response $response): Response

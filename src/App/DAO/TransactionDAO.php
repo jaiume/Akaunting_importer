@@ -182,6 +182,25 @@ class TransactionDAO
     }
 
     /**
+     * Clear match fields for a single transaction
+     */
+    public function clearMatchByTransactionId(int $transactionId): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE import_transactions 
+            SET matched_akaunting_id = NULL,
+                matched_akaunting_number = NULL,
+                matched_akaunting_date = NULL,
+                matched_akaunting_amount = NULL,
+                matched_akaunting_contact = NULL,
+                matched_akaunting_category = NULL,
+                match_confidence = NULL
+            WHERE transaction_id = :transaction_id
+        ");
+        return $stmt->execute(['transaction_id' => $transactionId]);
+    }
+
+    /**
      * Get match statistics for a batch
      */
     public function getMatchStats(int $batchId): array

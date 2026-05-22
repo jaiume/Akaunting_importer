@@ -608,6 +608,13 @@
                                     <span class="badge {% if txn.match_confidence == 'high' %}bg-success{% elseif txn.match_confidence == 'medium' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
                                         {{ txn.match_confidence|upper }}
                                     </span>
+                                    {% if txn.match_confidence in ['low', 'medium'] and txn.status != 'processed' %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary p-0 px-1 ms-1"
+                                            onclick="unmatchTransaction({{ txn.transaction_id }})"
+                                            title="Remove this match">
+                                        <i class="bi bi-link-45deg"></i> Unmatch
+                                    </button>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {# Replicate to another entity row (hidden by default) #}
@@ -949,6 +956,30 @@ function clearMatches() {
     })
     .catch(error => {
         alert('Failed to clear matches: ' + error.message);
+    });
+}
+
+function unmatchTransaction(transactionId) {
+    if (!confirm('Remove this match?')) return;
+
+    fetch(baseUrl + 'import/batch/' + batchId + '/unmatch-transaction', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ transaction_id: transactionId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = baseUrl + 'import/batch/' + batchId + '?success=Match+cleared';
+        } else {
+            alert(data.message || 'Failed to unmatch transaction');
+        }
+    })
+    .catch(error => {
+        alert('Failed to unmatch transaction: ' + error.message);
     });
 }
 

@@ -93,6 +93,7 @@ return function (App $app) {
         $group->post('/import/batch/{batch_id}/match-reset', [ImportController::class, 'matchReset']);
         $group->post('/import/batch/{batch_id}/reimport', [ImportController::class, 'reimportBatch']);
         $group->post('/import/batch/{batch_id}/push-transaction', [ImportController::class, 'pushTransaction']);
+        $group->post('/import/batch/{batch_id}/unmatch-transaction', [ImportController::class, 'unmatchTransaction']);
         $group->post('/import/batch/{batch_id}/replicate-transaction', [ImportController::class, 'replicateTransaction']);
         $group->get('/import/batch/{batch_id}/vendors', [ImportController::class, 'getVendors']);
         $group->post('/import/batch/{batch_id}/delete', [ImportController::class, 'deleteBatch']);
