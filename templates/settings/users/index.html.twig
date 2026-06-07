@@ -1,0 +1,150 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Users - Settings - Akaunting Importer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ base_url }}dashboard">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ base_url }}settings">Settings</a></li>
+                <li class="breadcrumb-item active">Users</li>
+            </ol>
+        </nav>
+
+        <h1 class="mb-4">
+            <i class="bi bi-people"></i> Users
+        </h1>
+
+        {% if success %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            {% if success == 'added' %}
+                <i class="bi bi-check-circle"></i> User approved successfully.
+            {% else %}
+                <i class="bi bi-check-circle"></i> {{ success }}
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            {% if error == 'csrf' %}
+                <i class="bi bi-exclamation-triangle"></i> Security token expired. Please try again.
+            {% elseif error == 'invalid_email' %}
+                <i class="bi bi-exclamation-triangle"></i> Enter a valid email address.
+            {% elseif error == 'not_approved' %}
+                <i class="bi bi-exclamation-triangle"></i> Your account is not approved to add users.
+            {% else %}
+                <i class="bi bi-exclamation-triangle"></i> Failed to update users. Please try again.
+            {% endif %}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+
+        <div class="row">
+            <div class="col-lg-5 mb-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="bi bi-person-plus"></i> Add Approved User</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ base_url }}settings/users/add">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token|e('html_attr') }}">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address</label>
+                                <input type="email" class="form-control" id="email" name="email" required placeholder="user@example.com">
+                                <small class="form-text text-muted">Only approved users can receive login links.</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg"></i> Approve User
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7 mb-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="bi bi-person-check"></i> Approved Users</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if approved_users|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Email</th>
+                                        <th>Approved</th>
+                                        <th>Approved By</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for approved_user in approved_users %}
+                                    <tr>
+                                        <td>{{ approved_user.email }}</td>
+                                        <td>
+                                            {% if approved_user.approved_at %}
+                                                {{ approved_user.approved_at|date('M j, Y H:i') }}
+                                            {% else %}
+                                                <span class="text-muted">Unknown</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ approved_user.approved_by_email ?: 'Manual bootstrap' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="p-4 text-muted">No approved users yet.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-shield-exclamation"></i> Unapproved Users</h5>
+                <span class="badge bg-secondary">{{ unapproved_count }} total</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">
+                    These rows cannot receive login links. They are shown to help review spam created before this hardening was deployed.
+                </p>
+                {% if recent_unapproved_users|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for unapproved_user in recent_unapproved_users %}
+                            <tr>
+                                <td>{{ unapproved_user.email }}</td>
+                                <td>{{ unapproved_user.created_at|date('M j, Y H:i') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="mb-0 text-muted">No unapproved users.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <a href="{{ base_url }}settings" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Settings
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -19,34 +19,24 @@ class AuthenticationService
     }
 
     /**
-     * Get or create user by email
-     * Returns user_id if found or created, null on error
+     * Get an approved user by email.
+     * Returns user data when approved, null otherwise.
      */
-    public function getOrCreateUserByEmail(string $email): ?int
+    public function getApprovedUserByEmail(string $email): ?array
     {
         try {
-            // Check if user exists
             $stmt = $this->db->prepare("
-                SELECT user_id 
+                SELECT user_id, email, is_approved
                 FROM users 
                 WHERE email = :email
+                AND is_approved = 1
             ");
-            $stmt->execute(['email' => $email]);
-            
-            if ($user = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                return $user['user_id'];
-            }
+            $stmt->execute(['email' => strtolower(trim($email))]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // Create new user
-            $stmt = $this->db->prepare("
-                INSERT INTO users (email)
-                VALUES (:email)
-            ");
-            $stmt->execute(['email' => $email]);
-            
-            return $this->db->lastInsertId();
+            return $user ?: null;
         } catch (\Exception $e) {
-            error_log('AuthenticationService::getOrCreateUserByEmail error: ' . $e->getMessage());
+            error_log('AuthenticationService::getApprovedUserByEmail error: ' . $e->getMessage());
             return null;
         }
     }
@@ -58,9 +48,12 @@ class AuthenticationService
     public function sendLoginToken(string $email): bool
     {
         try {
-            // Get or create user
-            $userId = $this->getOrCreateUserByEmail($email);
-            if (!$userId) {
+            $email = strtolower(trim($email));
+
+            // Only approved existing users receive magic links. The controller keeps
+            // the public response generic so this internal false does not enumerate users.
+            $user = $this->getApprovedUserByEmail($email);
+            if (!$user) {
                 return false;
             }
 
@@ -77,7 +70,7 @@ class AuthenticationService
             ");
             
             $stmt->execute([
-                'user_id' => $userId,
+                'user_id' => $user['user_id'],
                 'token' => $token,
                 'expiry' => $expiry->format('Y-m-d H:i:s')
             ]);
@@ -114,11 +107,13 @@ class AuthenticationService
             
             // Find valid, unused login token
             $stmt = $this->db->prepare("
-                SELECT login_token_id, user_id, token
-                FROM login_tokens 
-                WHERE token = :token 
-                AND expiry > NOW() 
-                AND used = 0
+                SELECT lt.login_token_id, lt.user_id, lt.token
+                FROM login_tokens lt
+                JOIN users u ON u.user_id = lt.user_id
+                WHERE lt.token = :token 
+                AND lt.expiry > NOW() 
+                AND lt.used = 0
+                AND u.is_approved = 1
             ");
             $stmt->execute(['token' => $loginToken]);
             
@@ -176,6 +171,7 @@ class AuthenticationService
                 FROM auth_tokens t
                 JOIN users u ON t.user_id = u.user_id
                 WHERE t.last_accessed > DATE_SUB(NOW(), INTERVAL :expiry_seconds SECOND)
+                AND u.is_approved = 1
                 ORDER BY t.last_accessed DESC
             ");
             $stmt->execute(['expiry_seconds' => $expirySeconds]);
@@ -209,9 +205,11 @@ class AuthenticationService
             // Find the token by verifying it first (since it's hashed)
             $stmt = $this->db->prepare("
                 SELECT token_id, token
-                FROM auth_tokens 
-                WHERE last_accessed > DATE_SUB(NOW(), INTERVAL :expiry_seconds SECOND)
-                ORDER BY last_accessed DESC
+                FROM auth_tokens t
+                JOIN users u ON t.user_id = u.user_id
+                WHERE t.last_accessed > DATE_SUB(NOW(), INTERVAL :expiry_seconds SECOND)
+                AND u.is_approved = 1
+                ORDER BY t.last_accessed DESC
             ");
             $stmt->execute(['expiry_seconds' => $expirySeconds]);
             
@@ -259,6 +257,7 @@ class AuthenticationService
             $stmt = $this->db->prepare("
                 DELETE FROM auth_tokens 
                 WHERE last_accessed <= DATE_SUB(NOW(), INTERVAL :expiry_seconds SECOND)
+                   OR user_id IN (SELECT user_id FROM users WHERE is_approved = 0)
             ");
             $stmt->execute(['expiry_seconds' => $expirySeconds]);
         } catch (\Exception $e) {
@@ -296,8 +295,10 @@ class AuthenticationService
             // Find the token by verifying it first (since it's hashed)
             $stmt = $this->db->prepare("
                 SELECT token_id, token
-                FROM auth_tokens 
-                WHERE last_accessed > DATE_SUB(NOW(), INTERVAL :expiry_seconds SECOND)
+                FROM auth_tokens t
+                JOIN users u ON t.user_id = u.user_id
+                WHERE t.last_accessed > DATE_SUB(NOW(), INTERVAL :expiry_seconds SECOND)
+                AND u.is_approved = 1
             ");
             $stmt->execute(['expiry_seconds' => $expirySeconds]);
             

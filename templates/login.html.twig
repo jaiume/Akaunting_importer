@@ -23,6 +23,8 @@
                     <i class="bi bi-exclamation-triangle"></i> 
                     {% if error == 'invalid_token' %}
                         Invalid or expired login link. Please request a new one.
+                    {% elseif error == 'captcha_failed' %}
+                        Please complete the slider check and try again.
                     {% else %}
                         {{ error }}
                     {% endif %}
@@ -35,6 +37,29 @@
                         <input type="email" class="form-control" id="email" name="email" required autofocus placeholder="your@email.com">
                         <small class="form-text text-muted">We'll send you a login link via email</small>
                     </div>
+
+                    {% if captcha is defined and captcha %}
+                    <div class="mb-3">
+                        <label for="captcha-position" class="form-label">Human check</label>
+                        <div class="captcha-box mb-2">
+                            <img src="{{ captcha.image_data }}" alt="Slider CAPTCHA target" class="img-fluid rounded border">
+                            <div id="captcha-piece"
+                                 class="captcha-piece"
+                                 style="top: {{ captcha.target_y }}px; width: {{ captcha.piece_size }}px; height: {{ captcha.piece_size }}px;"
+                                 aria-hidden="true"></div>
+                        </div>
+                        <input type="hidden" name="captcha_id" value="{{ captcha.id|e('html_attr') }}">
+                        <input type="range"
+                               class="form-range"
+                               id="captcha-position"
+                               name="captcha_position"
+                               min="0"
+                               max="{{ captcha.max_position }}"
+                               value="0"
+                               required>
+                        <small class="form-text text-muted">Slide the block to the highlighted square before requesting a login link.</small>
+                    </div>
+                    {% endif %}
                     
                     <button type="submit" class="btn btn-primary w-100 mb-2">
                         <i class="bi bi-envelope"></i> Send Login Link
@@ -48,5 +73,43 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .captcha-box {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .captcha-piece {
+        position: absolute;
+        left: 0;
+        border: 2px solid #4f46e5;
+        background: rgba(79, 70, 229, 0.25);
+        border-radius: 0.25rem;
+        box-shadow: 0 0.25rem 0.75rem rgba(15, 23, 42, 0.2);
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var slider = document.getElementById('captcha-position');
+    var piece = document.getElementById('captcha-piece');
+    if (!slider || !piece) {
+        return;
+    }
+
+    function movePiece() {
+        piece.style.left = slider.value + 'px';
+    }
+
+    slider.addEventListener('input', movePiece);
+    movePiece();
+})();
+</script>
 {% endblock %}
 

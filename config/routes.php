@@ -6,6 +6,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 // Controllers
 use App\Controllers\AuthController;
+use App\Controllers\UserController;
 use App\Controllers\DashboardController;
 use App\Controllers\SettingsController;
 use App\Controllers\EntityController;
@@ -48,6 +49,8 @@ return function (App $app) {
         
         // Settings
         $group->get('/settings', [SettingsController::class, 'index']);
+        $group->get('/settings/users', [UserController::class, 'index']);
+        $group->post('/settings/users/add', [UserController::class, 'add']);
         
         // Entity Management (with accounts)
         $group->get('/settings/entities', [EntityController::class, 'index']);

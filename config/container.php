@@ -3,20 +3,25 @@
 use DI\Container;
 use DI\ContainerBuilder;
 use Psr\Container\ContainerInterface;
-use PDO;
 
 // Services
 use App\Services\ConfigService;
 use App\Services\UtilityService;
 use App\Services\AuthenticationService;
+use App\Services\CaptchaService;
+use App\Services\ClientIpService;
+use App\Services\CsrfService;
 use App\Services\EntityService;
 use App\Services\AccountService;
 use App\Services\ImportService;
 use App\Services\InstallationService;
+use App\Services\LoginThrottleService;
 use App\Services\AccountLinkService;
 use App\Services\TransactionMatchingService;
 use App\Services\ReportService;
 use App\Services\PdfExtractClient;
+use App\Services\UserService;
+use App\DAO\UserDAO;
 use App\DAO\EntityDAO;
 use App\DAO\AccountDAO;
 use App\DAO\BatchDAO;
@@ -28,6 +33,7 @@ use App\DAO\OrphanTransactionDAO;
 
 // Controllers
 use App\Controllers\AuthController;
+use App\Controllers\UserController;
 use App\Controllers\DashboardController;
 use App\Controllers\SettingsController;
 use App\Controllers\EntityController;
@@ -84,6 +90,10 @@ $containerBuilder->addDefinitions([
     EntityDAO::class => function (ContainerInterface $c) {
         return new EntityDAO($c->get(PDO::class));
     },
+
+    UserDAO::class => function (ContainerInterface $c) {
+        return new UserDAO($c->get(PDO::class));
+    },
     
     AccountDAO::class => function (ContainerInterface $c) {
         return new AccountDAO($c->get(PDO::class));
@@ -121,6 +131,22 @@ $containerBuilder->addDefinitions([
         return new UtilityService($c->get(ConfigService::class));
     },
 
+    CaptchaService::class => function () {
+        return new CaptchaService();
+    },
+
+    ClientIpService::class => function () {
+        return new ClientIpService();
+    },
+
+    CsrfService::class => function () {
+        return new CsrfService();
+    },
+
+    LoginThrottleService::class => function (ContainerInterface $c) {
+        return new LoginThrottleService($c->get(PDO::class));
+    },
+
     PdfExtractClient::class => function () {
         return new PdfExtractClient();
     },
@@ -131,6 +157,10 @@ $containerBuilder->addDefinitions([
             $c->get(ConfigService::class),
             $c->get(UtilityService::class)
         );
+    },
+
+    UserService::class => function (ContainerInterface $c) {
+        return new UserService($c->get(UserDAO::class));
     },
     
     EntityService::class => function (ContainerInterface $c) {
@@ -219,7 +249,18 @@ $containerBuilder->addDefinitions([
         return new AuthController(
             $c->get('view'),
             $c->get(AuthenticationService::class),
-            $c->get(ConfigService::class)
+            $c->get(ConfigService::class),
+            $c->get(CaptchaService::class),
+            $c->get(ClientIpService::class),
+            $c->get(LoginThrottleService::class)
+        );
+    },
+
+    UserController::class => function (ContainerInterface $c) {
+        return new UserController(
+            $c->get('view'),
+            $c->get(UserService::class),
+            $c->get(CsrfService::class)
         );
     },
     

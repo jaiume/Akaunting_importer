@@ -7,10 +7,30 @@ USE `Akaunting_importer`;
 CREATE TABLE IF NOT EXISTS `users` (
   `user_id` int(11) NOT NULL AUTO_INCREMENT,
   `email` varchar(255) NOT NULL,
+  `is_approved` tinyint(1) NOT NULL DEFAULT 0,
+  `approved_by` int(11) DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`),
-  UNIQUE KEY `email` (`email`)
+  UNIQUE KEY `email` (`email`),
+  KEY `idx_users_is_approved` (`is_approved`),
+  KEY `idx_users_approved_by` (`approved_by`),
+  CONSTRAINT `users_approved_by_fk` FOREIGN KEY (`approved_by`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Login attempts table (rate limiting and audit trail for passwordless login requests)
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+  `attempt_id` int(11) NOT NULL AUTO_INCREMENT,
+  `email` varchar(255) NOT NULL,
+  `ip_address` varchar(45) NOT NULL,
+  `success` tinyint(1) NOT NULL DEFAULT 0,
+  `blocked_reason` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`attempt_id`),
+  KEY `idx_login_attempts_email_created` (`email`, `created_at`),
+  KEY `idx_login_attempts_ip_created` (`ip_address`, `created_at`),
+  KEY `idx_login_attempts_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Login tokens table (one-time use, emailed to users for login)

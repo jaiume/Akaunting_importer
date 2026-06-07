@@ -7,21 +7,33 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\Views\Twig;
 use App\RequestCookies;
 use App\Services\AuthenticationService;
+use App\Services\CaptchaService;
+use App\Services\ClientIpService;
 use App\Services\ConfigService;
+use App\Services\LoginThrottleService;
 
 class AuthController extends BaseController
 {
     private AuthenticationService $authService;
     private ConfigService $config;
+    private CaptchaService $captchaService;
+    private ClientIpService $clientIpService;
+    private LoginThrottleService $loginThrottleService;
 
     public function __construct(
         Twig $view,
         AuthenticationService $authService,
-        ConfigService $config
+        ConfigService $config,
+        CaptchaService $captchaService,
+        ClientIpService $clientIpService,
+        LoginThrottleService $loginThrottleService
     ) {
         parent::__construct($view);
         $this->authService = $authService;
         $this->config = $config;
+        $this->captchaService = $captchaService;
+        $this->clientIpService = $clientIpService;
+        $this->loginThrottleService = $loginThrottleService;
     }
 
     /**
@@ -47,6 +59,7 @@ class AuthController extends BaseController
         return $this->render($response, 'login.html.twig', [
             'success' => isset($queryParams['success']),
             'error' => $queryParams['error'] ?? null,
+            'captcha' => $this->captchaService->generate(),
         ]);
     }
 
@@ -56,13 +69,28 @@ class AuthController extends BaseController
     public function login(Request $request, Response $response): Response
     {
         $data = $this->getPostData($request);
-        $email = $data['email'] ?? '';
+        $email = strtolower(trim((string)($data['email'] ?? '')));
 
         if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return $this->redirect($response, '/login?error=invalid_email');
         }
 
-        $this->authService->sendLoginToken($email);
+        $clientIp = $this->clientIpService->getClientIp($request);
+        $blockedReason = $this->loginThrottleService->check($email, $clientIp);
+        if ($blockedReason !== null) {
+            $this->loginThrottleService->record($email, $clientIp, false, $blockedReason);
+            return $this->redirect($response, '/login?success=1');
+        }
+
+        $captchaId = isset($data['captcha_id']) ? (string)$data['captcha_id'] : null;
+        $captchaPosition = $data['captcha_position'] ?? null;
+        if (!$this->captchaService->validate($captchaId, $captchaPosition)) {
+            $this->loginThrottleService->record($email, $clientIp, false, 'captcha_failed');
+            return $this->redirect($response, '/login?error=captcha_failed');
+        }
+
+        $sent = $this->authService->sendLoginToken($email);
+        $this->loginThrottleService->record($email, $clientIp, $sent, $sent ? null : 'not_sent');
 
         // Always show success (don't reveal if email exists)
         return $this->redirect($response, '/login?success=1');
