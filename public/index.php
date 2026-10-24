@@ -36,3 +36,6 @@ $routes($app);
 // Run the app
 $app->run();
 
+// Receipt reads return first, then call the model after the response is sent.
+\App\Services\DeferredWork::run();
+

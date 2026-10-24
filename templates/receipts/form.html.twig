@@ -1,0 +1,244 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Import Receipts - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .file-upload-zone {
+        border: 3px dashed #dee2e6;
+        border-radius: 1rem;
+        padding: 3rem 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        cursor: pointer;
+    }
+    .file-upload-zone:hover, .file-upload-zone.dragover {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%);
+    }
+    .file-upload-zone.has-file {
+        border-color: #28a745;
+        border-style: solid;
+        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    }
+    .file-upload-zone .upload-icon { font-size: 4rem; color: #6c757d; }
+    .file-info-display { display: none; margin-top: 1.5rem; padding: 1rem; background: white; border-radius: 0.5rem; }
+    .file-info-display.visible { display: block; }
+    .form-section {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-top: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        opacity: 0.5;
+        pointer-events: none;
+    }
+    .form-section.enabled { opacity: 1; pointer-events: auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ base_url }}receipts">Receipts</a></li>
+        <li class="breadcrumb-item active">Import</li>
+    </ol>
+</nav>
+
+<h1 class="mb-4"><i class="bi bi-receipt"></i> Import receipts</h1>
+
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-lg-8">
+        <form method="POST" action="{{ base_url }}receipts/import" enctype="multipart/form-data" id="receiptForm">
+            <div class="file-upload-zone" id="fileUploadZone">
+                <i class="bi bi-file-earmark-pdf upload-icon"></i>
+                <h4 class="mb-2">Drop a receipt PDF here</h4>
+                <p class="text-muted mb-3">or click to browse</p>
+                <input type="file" class="d-none" id="import_file" name="import_file" accept="application/pdf,.pdf" required>
+                <button type="button" class="btn btn-outline-primary btn-lg" id="chooseFile">
+                    <i class="bi bi-folder2-open"></i> Choose PDF
+                </button>
+                <p class="text-muted mt-3 mb-0 small">One PDF, up to 20MB. Each page can hold one or more receipts, including handwriting.</p>
+                <div class="file-info-display" id="fileInfoDisplay">
+                    <strong id="displayFileName"></strong>
+                    <br><small class="text-muted" id="displayFileSize"></small>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="clearFile">Remove</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section" id="formSection">
+                <div class="mb-3">
+                    <label for="entity_name" class="form-label">Entity <span class="text-danger">*</span></label>
+                    <select class="form-select" id="entity_name" name="entity_name" required>
+                        <option value="">-- Select entity --</option>
+                        {% for entity in entities %}
+                        <option value="{{ entity.entity_name }}">{{ entity.entity_name }}{% if entity.description %} - {{ entity.description }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="account_id" class="form-label">Account <span class="text-danger">*</span></label>
+                    <select class="form-select" id="account_id" name="account_id" required disabled>
+                        <option value="">-- Select account --</option>
+                    </select>
+                    <div id="accountLoading" class="spinner-border spinner-border-sm d-none" role="status"></div>
+                </div>
+                <div class="mb-3">
+                    <label for="batch_name" class="form-label">Batch name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="batch_name" name="batch_name" required placeholder="e.g. March receipts">
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a href="{{ base_url }}receipts" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary btn-lg" id="submitBtn" disabled>
+                        <i class="bi bi-upload"></i> Save and open
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">How this import works</div>
+            <div class="card-body small text-muted">
+                <ol class="mb-0">
+                    <li class="mb-2">The PDF is saved. Nothing is sent to the model yet.</li>
+                    <li class="mb-2">Scroll through the pages. Read this page sends the page you are looking at.</li>
+                    <li class="mb-2">Select area lets you draw a box around one receipt and send only that.</li>
+                    <li>A draft is created with the date, vendor, and amount. You review it beside that page, then push it.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('import_file');
+    const zone = document.getElementById('fileUploadZone');
+    const info = document.getElementById('fileInfoDisplay');
+    const section = document.getElementById('formSection');
+    const submitBtn = document.getElementById('submitBtn');
+    const batchName = document.getElementById('batch_name');
+    const form = document.getElementById('receiptForm');
+
+    document.getElementById('chooseFile').addEventListener('click', function(e) {
+        e.stopPropagation();
+        fileInput.click();
+    });
+    zone.addEventListener('click', function(e) {
+        if (e.target.closest('button') || e.target.closest('.file-info-display')) return;
+        fileInput.click();
+    });
+    zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', function(e) { e.preventDefault(); zone.classList.remove('dragover'); });
+    zone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            takeFile(e.dataTransfer.files[0]);
+        }
+    });
+    fileInput.addEventListener('change', function() {
+        if (this.files.length) takeFile(this.files[0]);
+    });
+    document.getElementById('clearFile').addEventListener('click', function(e) {
+        e.stopPropagation();
+        fileInput.value = '';
+        zone.classList.remove('has-file');
+        info.classList.remove('visible');
+        section.classList.remove('enabled');
+        submitBtn.disabled = true;
+    });
+
+    function takeFile(file) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'pdf') {
+            alert('Please choose a PDF.');
+            fileInput.value = '';
+            return;
+        }
+        if (file.size > 20 * 1024 * 1024) {
+            alert('PDF must be 20MB or smaller.');
+            fileInput.value = '';
+            return;
+        }
+        zone.classList.add('has-file');
+        info.classList.add('visible');
+        section.classList.add('enabled');
+        document.getElementById('displayFileName').textContent = file.name;
+        document.getElementById('displayFileSize').textContent = Math.round(file.size / 1024) + ' KB';
+        if (!batchName.value) {
+            batchName.value = file.name.replace(/\.pdf$/i, '');
+        }
+        refreshSubmit();
+    }
+
+    document.getElementById('entity_name').addEventListener('change', function() {
+        const accountSelect = document.getElementById('account_id');
+        const loading = document.getElementById('accountLoading');
+        if (!this.value) {
+            accountSelect.disabled = true;
+            accountSelect.innerHTML = '<option value="">-- Select account --</option>';
+            refreshSubmit();
+            return;
+        }
+        accountSelect.disabled = true;
+        loading.classList.remove('d-none');
+        fetch('{{ base_url }}api/accounts/' + encodeURIComponent(this.value))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                loading.classList.add('d-none');
+                accountSelect.innerHTML = '<option value="">-- Select account --</option>';
+                if (data.success && data.accounts) {
+                    data.accounts.forEach(function(account) {
+                        const option = document.createElement('option');
+                        option.value = account.account_id;
+                        option.textContent = account.account_name + (account.currency ? ' - ' + account.currency : '');
+                        accountSelect.appendChild(option);
+                    });
+                    accountSelect.disabled = false;
+                } else {
+                    accountSelect.innerHTML = '<option value="">No accounts found</option>';
+                }
+                refreshSubmit();
+            })
+            .catch(function() {
+                loading.classList.add('d-none');
+                accountSelect.innerHTML = '<option value="">Error loading accounts</option>';
+                refreshSubmit();
+            });
+    });
+
+    ['entity_name', 'account_id'].forEach(function(id) {
+        document.getElementById(id).addEventListener('change', refreshSubmit);
+    });
+    batchName.addEventListener('input', refreshSubmit);
+
+    function refreshSubmit() {
+        const ready = fileInput.files.length > 0
+            && document.getElementById('entity_name').value
+            && document.getElementById('account_id').value
+            && batchName.value.trim();
+        submitBtn.disabled = !ready;
+    }
+
+    form.addEventListener('submit', function() {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving PDF…';
+    });
+});
+</script>
+{% endblock %}

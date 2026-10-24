@@ -1,0 +1,104 @@
+{% extends "base.html.twig" %}
+
+{% block title %}Receipts - Akaunting Importer{% endblock %}
+
+{% block styles %}
+<style>
+    .entity-header-row td { background: linear-gradient(135deg, #e8f4fd 0%, #f0f7ff 100%) !important; }
+    .account-header-row td { font-size: 0.85rem; }
+    .status-pending { color: #ffc107; }
+    .status-processing { color: #17a2b8; }
+    .status-completed { color: #28a745; }
+    .status-failed { color: #dc3545; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0"><i class="bi bi-receipt"></i> Receipts</h1>
+    <a href="{{ base_url }}receipts/import" class="btn btn-primary">
+        <i class="bi bi-cloud-upload"></i> Import receipts
+    </a>
+</div>
+
+{% if success %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    {{ success }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Receipt batches</h5>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="showArchivedToggle"
+                   {% if show_archived %}checked{% endif %}
+                   onchange="window.location='{{ base_url }}receipts{% if not show_archived %}?show_archived=1{% endif %}'">
+            <label class="form-check-label" for="showArchivedToggle">Show archived</label>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if grouped_batches|length > 0 %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Batch</th>
+                        <th>Dates</th>
+                        <th class="text-center">Receipts</th>
+                        <th class="text-center">Pushed</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entity in grouped_batches %}
+                    <tr class="entity-header-row">
+                        <td colspan="6" class="py-2"><span class="fw-bold text-primary"><i class="bi bi-building"></i> {{ entity.entity_name }}</span></td>
+                    </tr>
+                    {% for account_id, account in entity.accounts %}
+                    <tr class="account-header-row">
+                        <td colspan="6" class="py-1" style="padding-left: 1.5rem !important; background-color: #fafbfc;">
+                            <span class="text-secondary"><i class="bi bi-wallet2"></i> {{ account.account_name }}</span>
+                            <span class="badge bg-secondary ms-1">{{ account.batches|length }}</span>
+                        </td>
+                    </tr>
+                    {% for batch in account.batches %}
+                    <tr{% if batch.is_archived %} class="table-secondary"{% endif %}>
+                        <td style="padding-left: 2.5rem !important;">
+                            <a href="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}" class="text-decoration-none fw-medium">{{ batch.batch_name }}</a>
+                            {% if batch.is_archived %}<span class="badge bg-secondary ms-1">Archived</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if batch.min_date and batch.max_date %}
+                                <small>{{ batch.min_date|date('M j, Y') }}{% if batch.min_date != batch.max_date %} – {{ batch.max_date|date('M j, Y') }}{% endif %}</small>
+                            {% else %}
+                                <small class="text-muted">—</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">{{ batch.item_count }}</td>
+                        <td class="text-center">{{ batch.pushed_count }}</td>
+                        <td><span class="status-{{ batch.status }}">{{ batch.status }}</span></td>
+                        <td class="text-end">
+                            <a href="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}" class="btn btn-sm btn-outline-primary">Open</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-muted">No receipt batches yet. Import a multipage PDF to start.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

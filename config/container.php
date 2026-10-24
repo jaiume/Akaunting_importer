@@ -20,6 +20,9 @@ use App\Services\AccountLinkService;
 use App\Services\TransactionMatchingService;
 use App\Services\ReportService;
 use App\Services\PdfExtractClient;
+use App\Services\OpenRouterClient;
+use App\Services\PdfPageCounter;
+use App\Services\ReceiptService;
 use App\Services\UserService;
 use App\DAO\UserDAO;
 use App\DAO\EntityDAO;
@@ -30,6 +33,8 @@ use App\DAO\VendorDAO;
 use App\DAO\InstallationDAO;
 use App\DAO\MatchJobDAO;
 use App\DAO\OrphanTransactionDAO;
+use App\DAO\ReceiptBatchDAO;
+use App\DAO\ReceiptItemDAO;
 
 // Controllers
 use App\Controllers\AuthController;
@@ -43,6 +48,7 @@ use App\Controllers\ImportController;
 use App\Controllers\ApiController;
 use App\Controllers\ReconciliationController;
 use App\Controllers\ReportController;
+use App\Controllers\ReceiptController;
 
 // Middleware
 use App\Middleware\AuthenticationMiddleware;
@@ -208,6 +214,37 @@ $containerBuilder->addDefinitions([
     OrphanTransactionDAO::class => function (ContainerInterface $c) {
         return new OrphanTransactionDAO($c->get(PDO::class));
     },
+
+    ReceiptBatchDAO::class => function (ContainerInterface $c) {
+        return new ReceiptBatchDAO($c->get(PDO::class));
+    },
+
+    ReceiptItemDAO::class => function (ContainerInterface $c) {
+        return new ReceiptItemDAO($c->get(PDO::class));
+    },
+
+    OpenRouterClient::class => function () {
+        return new OpenRouterClient();
+    },
+
+    PdfPageCounter::class => function () {
+        return new PdfPageCounter();
+    },
+
+    ReceiptService::class => function (ContainerInterface $c) {
+        $storageDir = BASE_DIR . '/' . ConfigService::get('paths.receipts_dir', 'storage/receipts');
+        return new ReceiptService(
+            $c->get(ReceiptBatchDAO::class),
+            $c->get(ReceiptItemDAO::class),
+            $c->get(AccountDAO::class),
+            $c->get(InstallationDAO::class),
+            $c->get(InstallationService::class),
+            $c->get(VendorDAO::class),
+            $c->get(OpenRouterClient::class),
+            $c->get(PdfPageCounter::class),
+            $storageDir
+        );
+    },
     
     TransactionMatchingService::class => function (ContainerInterface $c) {
         $matchingWindowDays = (int)ConfigService::get('akaunting.matching_window_days', 5);
@@ -336,6 +373,14 @@ $containerBuilder->addDefinitions([
             $c->get('view'),
             $c->get(ReportService::class),
             $c->get(InstallationService::class)
+        );
+    },
+
+    ReceiptController::class => function (ContainerInterface $c) {
+        return new ReceiptController(
+            $c->get('view'),
+            $c->get(ReceiptService::class),
+            $c->get(EntityService::class)
         );
     },
 ]);

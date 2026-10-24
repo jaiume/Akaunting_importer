@@ -1,0 +1,53 @@
+-- Receipt document import tables. Statement import tables are unchanged.
+
+CREATE TABLE IF NOT EXISTS `receipt_batches` (
+  `receipt_batch_id` int(11) NOT NULL AUTO_INCREMENT,
+  `batch_name` varchar(255) NOT NULL,
+  `account_id` int(11) NOT NULL,
+  `stored_filename` varchar(500) NOT NULL,
+  `original_filename` varchar(500) DEFAULT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `status` enum('pending','processing','completed','failed') DEFAULT 'pending',
+  `page_count` int(11) DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  `is_archived` tinyint(1) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`receipt_batch_id`),
+  KEY `account_id` (`account_id`),
+  KEY `user_id` (`user_id`),
+  KEY `status` (`status`),
+  KEY `is_archived` (`is_archived`),
+  CONSTRAINT `receipt_batches_account_fk` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`account_id`) ON DELETE CASCADE,
+  CONSTRAINT `receipt_batches_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `receipt_items` (
+  `receipt_item_id` int(11) NOT NULL AUTO_INCREMENT,
+  `receipt_batch_id` int(11) NOT NULL,
+  `page_number` int(11) NOT NULL,
+  `receipt_date` date DEFAULT NULL,
+  `vendor_raw` varchar(500) DEFAULT NULL,
+  `amount` decimal(15,2) DEFAULT NULL,
+  `detected_currency` varchar(10) DEFAULT NULL,
+  `model_notes` text DEFAULT NULL,
+  `matched_contact_id` int(11) DEFAULT NULL,
+  `matched_contact_name` varchar(255) DEFAULT NULL,
+  `match_confidence` enum('high','medium','low') DEFAULT NULL,
+  `suggested_category_id` int(11) DEFAULT NULL,
+  `suggested_category_name` varchar(255) DEFAULT NULL,
+  `category_id` int(11) DEFAULT NULL,
+  `category_name` varchar(255) DEFAULT NULL,
+  `payment_method` varchar(100) DEFAULT NULL,
+  `status` enum('pending','skipped','pushed') DEFAULT 'pending',
+  `pushed_akaunting_transaction_number` varchar(50) DEFAULT NULL,
+  `pushed_at` timestamp NULL DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`receipt_item_id`),
+  KEY `receipt_batch_id` (`receipt_batch_id`),
+  KEY `page_number` (`page_number`),
+  KEY `status` (`status`),
+  CONSTRAINT `receipt_items_batch_fk` FOREIGN KEY (`receipt_batch_id`) REFERENCES `receipt_batches` (`receipt_batch_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

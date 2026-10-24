@@ -1,0 +1,593 @@
+{% extends "base.html.twig" %}
+
+{% block title %}{{ batch.batch_name }} - Receipts{% endblock %}
+
+{% block styles %}
+<style>
+    #receiptCanvas { max-width: 100%; height: auto; background: #fff; }
+    .receipt-row { cursor: pointer; }
+    .receipt-row.active { outline: 2px solid #4f46e5; }
+    .pdf-scroll {
+        height: 72vh;
+        overflow: auto;
+        background: #e9ecef;
+        border-radius: 0.5rem;
+        padding: 1rem;
+    }
+    .pdf-page {
+        position: relative;
+        margin: 0 auto 1rem;
+        width: fit-content;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,.15);
+    }
+    .pdf-page.current { outline: 3px solid #4f46e5; }
+    .pdf-page canvas { display: block; max-width: 100%; height: auto; }
+    .select-layer { display: none; position: absolute; inset: 0; cursor: crosshair; }
+    .pdf-scroll.selecting .select-layer { display: block; }
+    .select-box {
+        position: absolute;
+        border: 2px solid #4f46e5;
+        background: rgba(79, 70, 229, 0.18);
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ base_url }}receipts">Receipts</a></li>
+        <li class="breadcrumb-item active">{{ batch.batch_name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+        <h1 class="h3 mb-1"><i class="bi bi-receipt"></i> {{ batch.batch_name }}</h1>
+        <div class="text-muted">
+            {{ batch.entity_name }} · {{ batch.account_name }}
+            · <span class="text-uppercase">{{ batch.status }}</span>
+            {% if batch.page_count %} · {{ batch.page_count }} pages{% endif %}
+        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        {% if batch.is_archived %}
+        <form method="POST" action="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/unarchive">
+            <button type="submit" class="btn btn-outline-secondary">Unarchive</button>
+        </form>
+        {% else %}
+        <form method="POST" action="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/archive">
+            <button type="submit" class="btn btn-outline-secondary">Archive</button>
+        </form>
+        {% endif %}
+        <form method="POST" action="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/delete" onsubmit="return confirm('Delete this batch and its PDF?');">
+            <button type="submit" class="btn btn-outline-danger">Delete</button>
+        </form>
+    </div>
+</div>
+
+{% if success %}
+<div class="alert alert-success alert-dismissible fade show">{{ success }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show">{{ error }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+{% endif %}
+{% if batch.error_message and batch.status == 'failed' %}
+<div class="alert alert-warning">An earlier full-document read did not finish: {{ batch.error_message }} Scroll the PDF and read one page, or a selected area, instead.</div>
+{% endif %}
+{% if not has_installation %}
+<div class="alert alert-warning">This entity has no Akaunting installation. Receipts can be read and edited, and push stays unavailable.</div>
+{% elseif not account_linked %}
+<div class="alert alert-warning">This account is not linked to an Akaunting account, so receipts cannot be pushed yet.</div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="d-flex flex-wrap gap-2 mb-2">
+            <button type="button" class="btn btn-primary" id="readPageBtn">Read this page</button>
+            <button type="button" class="btn btn-outline-primary" id="selectAreaBtn">Select area</button>
+            <button type="button" class="btn btn-primary d-none" id="readAreaBtn" disabled>Read selection</button>
+            <button type="button" class="btn btn-link d-none" id="cancelAreaBtn">Cancel</button>
+            <span class="small text-muted align-self-center" id="pageLabel">Loading PDF…</span>
+        </div>
+        <div id="analyzeStatus" class="small mb-2"></div>
+        <div id="pdfScroll" class="pdf-scroll"></div>
+    </div>
+    <div class="col-lg-5">
+        {% if selected %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+                <span>Page {{ selected.page_number }}</span>
+                <span id="itemStatusBadge" class="badge bg-{{ selected.status == 'pushed' ? 'success' : (selected.status == 'skipped' ? 'secondary' : 'warning') }} text-{{ selected.status == 'pending' ? 'dark' : 'white' }}">{{ selected.status }}</span>
+            </div>
+            <div class="card-body">
+                {% if selected.detected_currency and batch.currency and selected.detected_currency|upper != batch.currency|upper %}
+                <div class="alert alert-warning py-2">Detected {{ selected.detected_currency }}. Push uses the account currency {{ batch.currency }}.</div>
+                {% endif %}
+                {% if selected.amount is not null and selected.amount < 0 %}
+                <div class="alert alert-warning py-2">This amount is negative, so it stays here for review and is not pushed as income.</div>
+                {% endif %}
+                {% if selected.model_notes %}
+                <p class="small text-muted">{{ selected.model_notes }}</p>
+                {% endif %}
+                {% if selected.pushed_akaunting_transaction_number %}
+                <p class="mb-2">Akaunting number <strong>{{ selected.pushed_akaunting_transaction_number }}</strong></p>
+                {% endif %}
+                {% if selected.error_message %}
+                <div class="alert alert-danger py-2">{{ selected.error_message }}</div>
+                {% endif %}
+
+                {% if selected.status == 'pushed' %}
+                <dl class="row mb-0">
+                    <dt class="col-4">Date</dt><dd class="col-8">{{ selected.receipt_date|default('—') }}</dd>
+                    <dt class="col-4">Vendor</dt><dd class="col-8">{{ selected.matched_contact_name|default(selected.vendor_raw)|default('—') }}</dd>
+                    <dt class="col-4">Amount</dt><dd class="col-8">{{ selected.amount is not null ? selected.amount : '—' }} {{ batch.currency }}</dd>
+                    <dt class="col-4">Category</dt><dd class="col-8">{{ selected.category_name|default('—') }}</dd>
+                    <dt class="col-4">Payment</dt><dd class="col-8">{{ selected.payment_method|default('—') }}</dd>
+                </dl>
+                {% else %}
+                <form method="POST" action="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/items/{{ selected.receipt_item_id }}" id="itemForm">
+                    <div class="mb-3">
+                        <label class="form-label" for="receipt_date">Date</label>
+                        <input type="date" class="form-control" id="receipt_date" name="receipt_date" value="{{ selected.receipt_date }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="contact_id">Vendor</label>
+                        <select class="form-select" id="contact_id" name="contact_id">
+                            <option value="">Not in the list</option>
+                            {% for vendor in vendors %}
+                            <option value="{{ vendor.akaunting_contact_id }}" {% if selected.matched_contact_id == vendor.akaunting_contact_id %}selected{% endif %}>{{ vendor.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if selected.match_confidence %}
+                        <div class="form-text">Suggested match is {{ selected.match_confidence }} confidence.</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="vendor_name">Vendor name</label>
+                        <input type="text" class="form-control" id="vendor_name" name="vendor_name" value="{{ selected.vendor_raw }}" placeholder="As written on the receipt">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="amount">Amount</label>
+                        <input type="number" step="0.01" class="form-control" id="amount" name="amount" value="{{ selected.amount }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="category_id">Category</label>
+                        <select class="form-select" id="category_id" name="category_id">
+                            <option value="">-- Select expense category --</option>
+                            {% for category in categories %}
+                            <option value="{{ category.akaunting_category_id }}" {% if selected.category_id == category.akaunting_category_id %}selected{% endif %}>{{ category.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if selected.suggested_category_name %}
+                        <div class="form-text">History suggests {{ selected.suggested_category_name }}.</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="payment_method">Payment method</label>
+                        <select class="form-select" id="payment_method" name="payment_method">
+                            <option value="">-- Select method --</option>
+                            {% for method in payment_methods %}
+                            <option value="{{ method.code }}" {% if selected.payment_method == method.code %}selected{% endif %}>{{ method.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <button type="submit" class="btn btn-primary" id="saveDraftBtn">{% if selected.receipt_date or selected.vendor_raw or selected.matched_contact_name or selected.amount is not null %}Update{% else %}Save{% endif %}</button>
+                        <button type="submit" class="btn btn-outline-secondary" formaction="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/items/{{ selected.receipt_item_id }}/skip" formnovalidate>Not a receipt</button>
+                        <span class="small" id="saveStatus"></span>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info">No drafts yet. Scroll to a page and choose Read this page, or draw a box around one receipt.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">Receipts in this PDF</div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Page</th>
+                    <th>Date</th>
+                    <th>Vendor</th>
+                    <th class="text-end">Amount</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr id="receipt-row-{{ item.receipt_item_id }}" class="receipt-row{% if selected and selected.receipt_item_id == item.receipt_item_id %} table-primary active{% endif %}"
+                    onclick="window.location='{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}?item={{ item.receipt_item_id }}'">
+                    <td>{{ item.page_number }}</td>
+                    <td class="js-date">{{ item.receipt_date|default('—') }}</td>
+                    <td class="js-vendor">{{ item.matched_contact_name|default(item.vendor_raw)|default('—') }}</td>
+                    <td class="text-end js-amount">
+                        <span class="js-amount-value">{{ item.amount is not null ? item.amount : '—' }}</span>
+                        {% if item.detected_currency and batch.currency and item.detected_currency|upper != batch.currency|upper %}
+                        <span class="text-warning" title="Detected {{ item.detected_currency }}">{{ item.detected_currency }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="js-category">{{ item.category_name|default(item.suggested_category_name)|default('—') }}</td>
+                    <td class="js-status">{{ item.status }}</td>
+                    <td class="text-nowrap" onclick="event.stopPropagation();">
+                        {% if item.status == 'pending' or item.status == 'skipped' %}
+                            {% if selected and selected.receipt_item_id == item.receipt_item_id %}
+                            <button type="submit" form="itemForm" class="btn btn-sm btn-success" formaction="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/items/{{ item.receipt_item_id }}/push" {% if not has_installation or not account_linked %}disabled{% endif %}>Push</button>
+                            {% else %}
+                            <form method="POST" action="{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/items/{{ item.receipt_item_id }}/push" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-success" {% if not has_installation or not account_linked or item.amount is null or item.amount <= 0 %}disabled{% endif %}>Push</button>
+                            </form>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-muted p-3">Nothing extracted yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const focusPage = {{ selected.page_number|default(1) }};
+    const fileUrl = '{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/file';
+    const analyzeUrl = '{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/analyze';
+    const batchUrl = '{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}';
+    const label = document.getElementById('pageLabel');
+    const scroll = document.getElementById('pdfScroll');
+    const status = document.getElementById('analyzeStatus');
+    const readPageBtn = document.getElementById('readPageBtn');
+    const selectAreaBtn = document.getElementById('selectAreaBtn');
+    const readAreaBtn = document.getElementById('readAreaBtn');
+    const cancelAreaBtn = document.getElementById('cancelAreaBtn');
+    const canvases = {};
+    let currentPage = focusPage;
+    let selection = null;
+    let busy = false;
+
+    function setCurrent(page) {
+        currentPage = page;
+        scroll.querySelectorAll('.pdf-page').forEach(function(node) {
+            node.classList.toggle('current', Number(node.dataset.page) === page);
+        });
+        const total = scroll.querySelectorAll('.pdf-page').length;
+        label.textContent = 'Page ' + page + (total ? ' of ' + total : '') + (selection && selection.page === page ? ' · area selected' : '');
+    }
+
+    function jpegUrl(canvas) {
+        let url = canvas.toDataURL('image/jpeg', 0.85);
+        if (url.length > 7000000) {
+            url = canvas.toDataURL('image/jpeg', 0.6);
+        }
+        return url;
+    }
+
+    function cropCanvas(canvas, box) {
+        const scaleX = canvas.width / canvas.clientWidth;
+        const scaleY = canvas.height / canvas.clientHeight;
+        const sx = Math.max(0, Math.round(box.x * scaleX));
+        const sy = Math.max(0, Math.round(box.y * scaleY));
+        const sw = Math.max(1, Math.round(box.w * scaleX));
+        const sh = Math.max(1, Math.round(box.h * scaleY));
+        const out = document.createElement('canvas');
+        out.width = sw;
+        out.height = sh;
+        out.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+        return jpegUrl(out);
+    }
+
+    function setBusy(on, message) {
+        busy = on;
+        readPageBtn.disabled = on;
+        selectAreaBtn.disabled = on;
+        readAreaBtn.disabled = on || !selection;
+        status.textContent = message || '';
+        status.className = 'small mb-2 ' + (on ? 'text-primary' : '');
+    }
+
+    function sendImage(page, image) {
+        if (image.length > 9000000) {
+            status.textContent = 'That image is too large. Select a smaller area.';
+            status.className = 'small mb-2 text-danger';
+            return;
+        }
+        setBusy(true, 'Reading page ' + page + '…');
+        fetch(analyzeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ page: page, image: image })
+        })
+            .then(function(response) {
+                return response.text().then(function(text) {
+                    var data = null;
+                    try { data = JSON.parse(text); } catch (e) { data = null; }
+                    return { ok: response.ok, status: response.status, data: data };
+                });
+            })
+            .then(function(result) {
+                if (!result.data) {
+                    throw new Error(result.status === 504
+                        ? 'The read was cut off before the model finished. Try a smaller area.'
+                        : 'The page could not be read.');
+                }
+                if (!result.ok || !result.data.success) {
+                    throw new Error(result.data.message || 'The page could not be read.');
+                }
+                if (result.data.pending && result.data.job_id) {
+                    watchJob(result.data.job_id, page, Date.now());
+                    return;
+                }
+                window.location = batchUrl + '?success=' + encodeURIComponent(result.data.message || 'Draft receipt created.') + (result.data.item_id ? '&item=' + result.data.item_id : '');
+            })
+            .catch(function(error) {
+                setBusy(false, '');
+                status.textContent = error.message || 'The page could not be read.';
+                status.className = 'small mb-2 text-danger';
+            });
+    }
+
+    function watchJob(jobId, page, started) {
+        fetch(analyzeUrl + '/' + jobId, { headers: { 'Accept': 'application/json' } })
+            .then(function(response) {
+                return response.text().then(function(text) {
+                    try { return JSON.parse(text); } catch (e) { return null; }
+                });
+            })
+            .then(function(data) {
+                if (!data || !data.success) {
+                    throw new Error((data && data.message) || 'The page could not be read.');
+                }
+                if (data.status === 'running') {
+                    if (Date.now() - started > 240000) {
+                        throw new Error('The read did not finish. Try that page again.');
+                    }
+                    status.textContent = 'Reading page ' + page + '…';
+                    setTimeout(function() { watchJob(jobId, page, started); }, 2000);
+                    return;
+                }
+                if (data.status !== 'done') {
+                    throw new Error(data.message || 'The page could not be read.');
+                }
+                window.location = batchUrl + '?success=' + encodeURIComponent(data.message || 'Draft receipt created.') + (data.item_id ? '&item=' + data.item_id : '');
+            })
+            .catch(function(error) {
+                setBusy(false, '');
+                status.textContent = error.message || 'The page could not be read.';
+                status.className = 'small mb-2 text-danger';
+            });
+    }
+
+    readPageBtn.addEventListener('click', function() {
+        const canvas = canvases[currentPage];
+        if (!canvas || busy) return;
+        sendImage(currentPage, jpegUrl(canvas));
+    });
+
+    function clearSelection() {
+        selection = null;
+        scroll.querySelectorAll('.select-box').forEach(function(box) { box.remove(); });
+        readAreaBtn.disabled = true;
+        setCurrent(currentPage);
+    }
+
+    selectAreaBtn.addEventListener('click', function() {
+        scroll.classList.add('selecting');
+        selectAreaBtn.classList.add('d-none');
+        readAreaBtn.classList.remove('d-none');
+        cancelAreaBtn.classList.remove('d-none');
+        clearSelection();
+    });
+    cancelAreaBtn.addEventListener('click', function() {
+        scroll.classList.remove('selecting');
+        selectAreaBtn.classList.remove('d-none');
+        readAreaBtn.classList.add('d-none');
+        cancelAreaBtn.classList.add('d-none');
+        clearSelection();
+    });
+    readAreaBtn.addEventListener('click', function() {
+        if (!selection || busy) return;
+        const canvas = canvases[selection.page];
+        if (!canvas) return;
+        sendImage(selection.page, cropCanvas(canvas, selection));
+    });
+
+    function attachSelect(layer, page, canvas) {
+        let start = null;
+        layer.addEventListener('mousedown', function(event) {
+            if (!scroll.classList.contains('selecting') || busy) return;
+            event.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            start = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+            clearSelection();
+            const box = document.createElement('div');
+            box.className = 'select-box';
+            layer.appendChild(box);
+            function move(ev) {
+                const x = ev.clientX - rect.left;
+                const y = ev.clientY - rect.top;
+                const left = Math.max(0, Math.min(start.x, x));
+                const top = Math.max(0, Math.min(start.y, y));
+                const width = Math.min(Math.abs(x - start.x), rect.width - left);
+                const height = Math.min(Math.abs(y - start.y), rect.height - top);
+                box.style.left = left + 'px';
+                box.style.top = top + 'px';
+                box.style.width = width + 'px';
+                box.style.height = height + 'px';
+                selection = { page: page, x: left, y: top, w: width, h: height };
+            }
+            function up() {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+                if (!selection || selection.w < 12 || selection.h < 12) {
+                    clearSelection();
+                    return;
+                }
+                setCurrent(page);
+                readAreaBtn.disabled = false;
+            }
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', up);
+        });
+    }
+
+    if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.getDocument({ url: fileUrl, disableRange: true, disableStream: true, withCredentials: true }).promise
+            .then(function(pdf) {
+                const jobs = [];
+                const width = Math.max(280, scroll.clientWidth - 32);
+                for (let number = 1; number <= pdf.numPages; number++) {
+                    const holder = document.createElement('div');
+                    holder.className = 'pdf-page';
+                    holder.dataset.page = String(number);
+                    const canvas = document.createElement('canvas');
+                    const layer = document.createElement('div');
+                    layer.className = 'select-layer';
+                    holder.appendChild(canvas);
+                    holder.appendChild(layer);
+                    scroll.appendChild(holder);
+                    canvases[number] = canvas;
+                    attachSelect(layer, number, canvas);
+                    jobs.push(pdf.getPage(number).then(function(page) {
+                        const base = page.getViewport({ scale: 1 });
+                        const viewport = page.getViewport({ scale: Math.min(2, width / base.width) });
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        return page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+                    }));
+                }
+                return Promise.all(jobs);
+            })
+            .then(function() {
+                setCurrent(focusPage);
+                const node = scroll.querySelector('.pdf-page[data-page="' + focusPage + '"]');
+                if (node) node.scrollIntoView({ block: 'start' });
+                const observer = new IntersectionObserver(function(entries) {
+                    let best = null;
+                    entries.forEach(function(entry) {
+                        if (entry.isIntersecting && (!best || entry.intersectionRatio > best.intersectionRatio)) {
+                            best = entry;
+                        }
+                    });
+                    if (best) setCurrent(Number(best.target.dataset.page));
+                }, { root: scroll, threshold: [0.4, 0.6, 0.8] });
+                scroll.querySelectorAll('.pdf-page').forEach(function(node) { observer.observe(node); });
+            })
+            .catch(function() {
+                label.textContent = 'The receipt PDF could not be shown.';
+            });
+    }
+
+    const contact = document.getElementById('contact_id');
+    const vendorName = document.getElementById('vendor_name');
+    const category = document.getElementById('category_id');
+    const payment = document.getElementById('payment_method');
+    if (!contact) return;
+
+    function vendorLabel() {
+        if (contact.value) {
+            return contact.options[contact.selectedIndex].text;
+        }
+        return vendorName.value.trim();
+    }
+
+    function applySuggestion() {
+        const name = vendorLabel();
+        if (!name) return;
+        fetch('{{ base_url }}receipts/batch/{{ batch.receipt_batch_id }}/suggestion?vendor=' + encodeURIComponent(name))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success || !data.suggested) return;
+                if (data.suggested.category_id && category) {
+                    category.value = String(data.suggested.category_id);
+                }
+                if (data.suggested.payment_method && payment) {
+                    payment.value = data.suggested.payment_method;
+                }
+            })
+            .catch(function() {});
+    }
+
+    contact.addEventListener('change', function() {
+        if (contact.value && !vendorName.value.trim()) {
+            vendorName.value = contact.options[contact.selectedIndex].text;
+        }
+        applySuggestion();
+    });
+    vendorName.addEventListener('change', applySuggestion);
+
+    const itemForm = document.getElementById('itemForm');
+    const saveDraftBtn = document.getElementById('saveDraftBtn');
+    const saveStatus = document.getElementById('saveStatus');
+    if (itemForm && saveDraftBtn) {
+        itemForm.addEventListener('submit', function(event) {
+            if (event.submitter !== saveDraftBtn) return;
+            event.preventDefault();
+            saveDraftBtn.disabled = true;
+            saveStatus.textContent = 'Saving…';
+            saveStatus.className = 'small text-muted';
+            fetch(itemForm.action, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+                body: new FormData(itemForm)
+            })
+                .then(function(response) {
+                    return response.text().then(function(text) {
+                        var data = null;
+                        try { data = JSON.parse(text); } catch (e) { data = null; }
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function(result) {
+                    if (!result.data || !result.ok || !result.data.success) {
+                        throw new Error((result.data && result.data.message) || 'The draft could not be saved.');
+                    }
+                    const item = result.data.item || {};
+                    const row = document.getElementById('receipt-row-' + item.receipt_item_id);
+                    if (row) {
+                        const dateCell = row.querySelector('.js-date');
+                        const vendorCell = row.querySelector('.js-vendor');
+                        const amountCell = row.querySelector('.js-amount-value');
+                        const categoryCell = row.querySelector('.js-category');
+                        const statusCell = row.querySelector('.js-status');
+                        if (dateCell) dateCell.textContent = item.receipt_date || '—';
+                        if (vendorCell) vendorCell.textContent = item.vendor || '—';
+                        if (amountCell) amountCell.textContent = item.amount === null || item.amount === '' ? '—' : item.amount;
+                        if (categoryCell) categoryCell.textContent = item.category || '—';
+                        if (statusCell) statusCell.textContent = item.status || 'pending';
+                    }
+                    const badge = document.getElementById('itemStatusBadge');
+                    if (badge) {
+                        badge.textContent = item.status || 'pending';
+                        badge.className = 'badge bg-warning text-dark';
+                    }
+                    saveDraftBtn.textContent = 'Update';
+                    saveStatus.textContent = 'Draft updated.';
+                    saveStatus.className = 'small text-success';
+                })
+                .catch(function(error) {
+                    saveStatus.textContent = error.message || 'The draft could not be saved.';
+                    saveStatus.className = 'small text-danger';
+                })
+                .finally(function() {
+                    saveDraftBtn.disabled = false;
+                });
+        });
+    }
+});
+</script>
+{% endblock %}

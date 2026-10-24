@@ -16,6 +16,7 @@ use App\Controllers\ImportController;
 use App\Controllers\ApiController;
 use App\Controllers\ReconciliationController;
 use App\Controllers\ReportController;
+use App\Controllers\ReceiptController;
 
 // Middleware
 use App\Middleware\AuthenticationMiddleware;
@@ -102,6 +103,23 @@ return function (App $app) {
         $group->post('/import/batch/{batch_id}/delete', [ImportController::class, 'deleteBatch']);
         $group->post('/import/batch/{batch_id}/archive', [ImportController::class, 'archiveBatch']);
         $group->post('/import/batch/{batch_id}/unarchive', [ImportController::class, 'unarchiveBatch']);
+
+        // Receipts
+        $group->get('/receipts', [ReceiptController::class, 'index']);
+        $group->get('/receipts/import', [ReceiptController::class, 'showForm']);
+        $group->post('/receipts/import', [ReceiptController::class, 'import']);
+        $group->get('/receipts/batch/{batch_id}', [ReceiptController::class, 'showBatch']);
+        $group->get('/receipts/batch/{batch_id}/file', [ReceiptController::class, 'file']);
+        $group->post('/receipts/batch/{batch_id}/analyze', [ReceiptController::class, 'analyze']);
+        $group->get('/receipts/batch/{batch_id}/analyze/{job_id}', [ReceiptController::class, 'analyzeStatus']);
+        $group->get('/receipts/batch/{batch_id}/suggestion', [ReceiptController::class, 'suggestion']);
+        $group->post('/receipts/batch/{batch_id}/retry', [ReceiptController::class, 'retry']);
+        $group->post('/receipts/batch/{batch_id}/archive', [ReceiptController::class, 'archive']);
+        $group->post('/receipts/batch/{batch_id}/unarchive', [ReceiptController::class, 'unarchive']);
+        $group->post('/receipts/batch/{batch_id}/delete', [ReceiptController::class, 'delete']);
+        $group->post('/receipts/batch/{batch_id}/items/{item_id}', [ReceiptController::class, 'saveItem']);
+        $group->post('/receipts/batch/{batch_id}/items/{item_id}/push', [ReceiptController::class, 'pushItem']);
+        $group->post('/receipts/batch/{batch_id}/items/{item_id}/skip', [ReceiptController::class, 'skipItem']);
         
         // Reconciliation
         $group->get('/reconciliation/account/{account_id}', [ReconciliationController::class, 'showAccountReconciliation']);
